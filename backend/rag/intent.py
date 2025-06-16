@@ -27,11 +27,39 @@ async def classify_intent(text: str) -> str:
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     
     prompt = (
-        "You are an intent classifier for an archive assistant.\n"
-        "Return exactly 'knowledge' if the message asks for factual "
-        "information about the Emanuele Artom collection.\n"
-        "Return exactly 'chitchat' for greetings, thanks, farewells, or casual conversation.\n"
-        f"Message: {text!r}"
+        "You are an intelligent intent classifier for Archivio, a digital curator of the Emanuele Artom collection.\n\n"
+        
+        "CONTEXT: Emanuele Artom (1915-1944) was an Italian-Jewish intellectual, historian, and resistance fighter "
+        "who died fighting against Nazi forces. His collection includes his personal writings, library, and works about him.\n\n"
+        
+        "TASK: Classify the user's message into exactly one category:\n\n"
+        
+        "Return 'knowledge' if the message:\n"
+        "- Asks factual questions about Emanuele Artom, his life, works, or ideas\n"
+        "- Inquires about books in his library or intellectual influences\n"
+        "- Seeks information about the historical context (WWII, Italian Resistance, Jewish experience)\n"
+        "- Requests analysis or interpretation of documents in the collection\n"
+        "- Asks about the collection itself, its contents, or archival details\n"
+        "- Shows scholarly or research interest in any aspect of Artom's legacy\n\n"
+        
+        "Return 'chitchat' if the message:\n"
+        "- Contains greetings, farewells, or social pleasantries\n"
+        "- Expresses thanks, appreciation, or emotional responses\n"
+        "- Makes casual conversation or personal comments\n"
+        "- Asks about the curator/assistant rather than the collection\n"
+        "- Contains brief acknowledgments or confirmations\n\n"
+        
+        "EXAMPLES:\n"
+        "- 'Who was Emanuele Artom?' → knowledge\n"
+        "- 'What books did he read about philosophy?' → knowledge\n"
+        "- 'Tell me about the Italian Resistance' → knowledge\n"
+        "- 'Hello there!' → chitchat\n"
+        "- 'Thank you for that information' → chitchat\n"
+        "- 'That's fascinating!' → chitchat\n\n"
+        
+        f"MESSAGE TO CLASSIFY: {text!r}\n\n"
+        
+        "RESPOND WITH EXACTLY: 'knowledge' or 'chitchat'"
     )
     
     # Prepare API request
