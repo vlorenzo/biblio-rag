@@ -41,12 +41,13 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
   - Auto-created HNSW index for fast cosine search
   - Helper to embed query and return top-k chunks with document metadata
 
-### **4. RAG Core (NEW)**
-- ✅ **Prompt Builder** (`backend/rag/prompt/builder.py`) – builds inline-tagged context with citation map.
-- ✅ **Guardrails** (`backend/rag/guardrails/*`) – token limit + citation validation + safe refusal.
-- ✅ **ReAct Agent** (`backend/rag/agent/react_agent.py`) – lightweight ReAct loop with pluggable LLM call (regex action parsing).
-- ✅ **Chat Orchestrator** (`backend/rag/engine.py`) – ties together retrieval, prompt builder, agent and guardrails.
-- ✅ **Smoke-tests** (`tests/test_prompt_builder.py`, `tests/test_guardrails.py`, `tests/test_react_agent.py`).
+### **4. RAG Core (UPDATED)**
+- ✅ **Prompt Builder** (`backend/rag/prompt/builder.py`) – builds inline-tagged context with citation map + conversation mode instructions.
+- ✅ **Guardrails** (`backend/rag/guardrails/*`) – token limit + citation validation + chitchat constraints + safe refusal.
+- ✅ **ReAct Agent** (`backend/rag/agent/react_agent.py`) – lightweight ReAct loop with conversation mode detection (chitchat vs knowledge).
+- ✅ **Chat Orchestrator** (`backend/rag/engine.py`) – ties together retrieval, prompt builder, agent and guardrails with mode-aware citation handling.
+- ✅ **Conversation Modes** – Agent can distinguish between chitchat (greetings, brief social) and knowledge queries (factual questions requiring citations).
+- ✅ **Enhanced Tests** (`tests/test_react_agent.py`) – covers both conversation modes.
 
 ### **5. Conversation API (NEW)**
 - ✅ **FastAPI Application** (`backend/api/__init__.py`) – main app with lifespan management for database cleanup
@@ -90,7 +91,27 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 - ❌ **OpenAI Integration**: Embedding service and ReAct agent call rely on API key; only stubbed in tests
 - ✅ **Metadata Ingestion**: Ingest script loads CSV metadata; chunk/embedding path pending text files
 
-## 🔧 **What Actually Works (Probably)**
+## 🔧 **What Actually Works (Verified)**
+
+### **New Conversation Modes (December 2024)**
+The system now supports intelligent conversation management:
+
+**Chitchat Mode:**
+- Handles greetings, thanks, farewells politely
+- Responses are brief and redirect to the collection scope
+- No citations required or allowed
+- Example: "Hi!" → "Hi! How can I help you with the Emanuele Artom collection?"
+
+**Knowledge Mode:**
+- Handles factual questions about the bibliographic corpus
+- Requires citations for all factual claims
+- Falls back to safe refusal if no sources available
+- Example: "Who was Artom?" → Answer with [1] citations or refusal
+
+**Guardrails:**
+- Chitchat responses cannot contain citations or be too long
+- Knowledge responses must have valid citations
+- Out-of-scope questions get polite refusal
 
 ### **Standalone Components**
 These components should work independently:

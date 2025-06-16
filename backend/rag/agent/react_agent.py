@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 _ACTION_RE = re.compile(r"Action:\s*(Search|Answer)(?:\[(.*?)\])?", re.I)
-_FINAL_RE = re.compile(r"Final:\s*(.*)", re.I | re.S)
+_FINAL_RE = re.compile(r"Final\(type\s*=\s*(\w+)\):\s*(.*)", re.I | re.S)
 
 
 class ReActAgent:
@@ -61,7 +61,7 @@ class ReActAgent:
         self,
         messages: List[Dict[str, str]],
         citation_map: Dict[int, dict],
-    ) -> Tuple[str, List[int]]:
+    ) -> Tuple[str, List[int], str]:
         scratchpad: List[str] = []
         last_observation: Optional[str] = None
 
@@ -85,15 +85,22 @@ class ReActAgent:
                 continue
 
             if action == "Answer":
-                # extract final answer text
+                # extract final answer text and type
                 final_match = _FINAL_RE.search(llm_response)
-                answer_text = final_match.group(1).strip() if final_match else argument or ""
-                guarded_answer = apply_guardrails(answer_text, citation_map, messages)
+                if final_match:
+                    answer_type = final_match.group(1).lower()
+                    answer_text = final_match.group(2).strip()
+                else:
+                    # fallback for old format or missing type
+                    answer_type = "knowledge"
+                    answer_text = argument or ""
+                
+                guarded_answer = apply_guardrails(answer_text, citation_map, messages, answer_type=answer_type)
                 citation_indexes = _extract_citation_indexes(guarded_answer)
-                return guarded_answer, sorted(citation_indexes)
+                return guarded_answer, sorted(citation_indexes), answer_type
 
         # If we exit loop without answer → refuse.
-        return REFUSAL_MSG, []
+        return REFUSAL_MSG, [], "knowledge"
 
     # -------------------------------------------------------------------
     # Internals

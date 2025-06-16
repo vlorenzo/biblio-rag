@@ -56,17 +56,21 @@ async def chat(
     # 3. ReAct agent
     # ------------------------------------------------------------------
     agent = ReActAgent()
-    answer, used_citations = await agent.run(messages, citation_map)
+    answer, used_citations, answer_type = await agent.run(messages, citation_map)
 
     # ------------------------------------------------------------------
     # 4. Final guardrails (token limit already handled inside agent)
     # ------------------------------------------------------------------
-    final_answer = apply_guardrails(answer, citation_map, messages)
+    final_answer = apply_guardrails(answer, citation_map, messages, answer_type=answer_type)
 
     logger.info("Chat answered with %s citations", len(used_citations))
 
     from uuid import uuid4
 
-    selected_citations = {idx: citation_map[idx] for idx in used_citations if idx in citation_map}
+    # Only include citations for knowledge answers
+    if answer_type == "knowledge":
+        selected_citations = {idx: citation_map[idx] for idx in used_citations if idx in citation_map}
+    else:
+        selected_citations = {}
 
     return ChatResponse(request_id=uuid4(), answer=final_answer, citations=selected_citations) 
