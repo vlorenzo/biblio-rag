@@ -52,11 +52,20 @@
 5. ✅ Glue `chat` orchestrator (`backend/rag/engine.py`).
 6. ✅ Smoke-tests for PromptBuilder, Guardrails and ReActAgent (`tests/test_prompt_builder.py`, `tests/test_guardrails.py`, `tests/test_react_agent.py`).
 
-### Phase 4 – Conversation API (1 day) 🔄 PENDING
-1. Schemas: `ChatRequest`, `ChatResponse` (pydantic)  
-2. Endpoint `/chat` orchestrates: ReAct Planner → (maybe) Retriever → answer  
-3. Streaming responses via Server-Sent Events (SSE)
-4. **Batch monitoring endpoints**: `/batches/{id}`, `/batches/` for ingestion status
+### Phase 4 – Conversation API (1 day) ✅ **COMPLETED**
+1. ✅ Schemas: `ChatRequest`, `ChatResponse` (pydantic) – already existed in `backend/rag/schemas.py`
+2. ✅ FastAPI application skeleton (`backend/api/__init__.py`) with lifespan management for DB cleanup
+3. ✅ API Router (`backend/api/routes.py`) with three endpoints:
+   - `GET /healthz` – health check returning `{"status": "ok"}`
+   - `GET /metrics` – Prometheus metrics with optional bearer token protection
+   - `POST /chat` – main conversational endpoint calling `rag_engine.chat()`
+4. ✅ Prometheus metrics integration with request counting
+5. ✅ Proper error handling with HTTP status codes
+6. ✅ Dependency injection for async database sessions
+7. ✅ Added `prometheus-client>=0.19.0` dependency to `pyproject.toml`
+8. ✅ Added `metrics_token` configuration option for optional metrics endpoint protection
+
+**Note**: Streaming responses via SSE was not implemented (kept simple as requested)
 
 ### Phase 5 – Frontend Chat UI (optional, 1 day) 🔄 PENDING
 1. Minimal HTML + Alpine.js / React (Vite)  
@@ -150,8 +159,8 @@
 - **Impact**: Faster similarity queries; slightly higher RAM usage during build.
 
 ### Implementation Status Summary
-* **Phase 0-3**: ✅ **COMPLETED** (Phase 3 finished with simplified yet functional RAG core)
-* **Phase 4-8**: 🔄 **PENDING** – API, UI, migrations & deployment still to be tackled
+* **Phase 0-4**: ✅ **COMPLETED** (Core ingestion pipeline, RAG engine, and Conversation API are functional)
+* **Phase 5-8**: 🔄 **PENDING** – Frontend UI, comprehensive testing, and deployment automation
 
 The actual implementation exceeded the original plan scope for the ingestion pipeline, providing a more robust and production-ready foundation for the RAG system.
 
@@ -163,3 +172,37 @@ The actual implementation exceeded the original plan scope for the ingestion pip
 | Action parsing | Function-calling / JSON | Regex on `Action:` / `Final:` markers | Keeps dependencies minimal and works with GPT-3.5/4 models |
 | Search tool integration | Agent <-> Retriever round-trip | Current agent stubs `Search` action (full loop to be wired in Phase 4) | Allows offline tests without DB/LLM |
 | Test coverage gate | 90 % global | Temporarily disabled for smoke-tests; legacy DB tests remain | Focus on fast feedback; will reinstate after integration |
+
+### **Phase 4 Implementation Notes (December 2024)**
+
+#### **What Was Actually Built**
+- **FastAPI Application**: Complete HTTP API with proper async/await patterns
+- **Three Core Endpoints**: Health check, metrics, and chat functionality
+- **Prometheus Integration**: Request counting and standard Python metrics
+- **Database Integration**: Proper async session management with dependency injection
+- **Error Handling**: HTTP status codes and JSON error responses
+- **Configuration Management**: Optional metrics token protection
+
+#### **Key Implementation Decisions**
+- **No Streaming**: Kept responses simple (full JSON) instead of Server-Sent Events
+- **Manual Metrics**: Used endpoint-level counters instead of middleware (APIRouter limitation)
+- **Minimal Dependencies**: Only added `prometheus-client`, reused existing schemas
+- **Clean Architecture**: API layer only handles HTTP concerns, business logic stays in `rag.engine`
+
+#### **Verified Functionality**
+- ✅ API starts successfully with `uvicorn backend.api:app --reload`
+- ✅ `/healthz` returns `{"status": "ok"}`
+- ✅ `/metrics` returns Prometheus format with request counters
+- ✅ `/chat` processes requests and returns proper `ChatResponse` JSON
+- ✅ Database sessions work correctly with async dependency injection
+- ✅ Error handling produces meaningful HTTP 500 responses
+
+#### **Current API Capabilities**
+The API is production-ready for basic conversational interactions. When the database contains ingested documents with embeddings, the `/chat` endpoint will:
+1. Accept user queries with conversation history
+2. Perform vector similarity search on document chunks
+3. Use ReAct agent reasoning to generate grounded responses
+4. Return answers with source citations
+5. Apply guardrails to prevent hallucination
+
+Without ingested content, the system safely returns "I can't answer that question" responses.

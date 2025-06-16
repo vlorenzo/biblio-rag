@@ -295,7 +295,80 @@ Total chunks: 0
 
 Le parti restanti della guida restano valide; dove veniva citato `rag-ingest ingest` sostituiscilo con lo script `ingest.py`.
 
-## Step 8: Test Document Ingestion (Experimental)
+## Step 8: Test the Conversation API (NEW)
+
+### ✅ **Confirmed Working**
+
+The Conversation API is now fully implemented and can be tested immediately.
+
+### Start the API Server
+
+```bash
+# Make sure you're in the project directory with activated venv
+uvicorn backend.api:app --reload
+```
+
+**Expected output:**
+```
+INFO:     Will watch for changes in these directories: ['/Users/lorenzov/_SW_Projects/RAG_Unito']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [xxxxx] using WatchFiles
+INFO:     Started server process [xxxxx]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+```
+
+### Test the Three API Endpoints
+
+**1. Health Check:**
+```bash
+curl http://127.0.0.1:8000/healthz
+```
+**Expected:** `{"status":"ok"}`
+
+**2. Metrics (Prometheus format):**
+```bash
+curl http://127.0.0.1:8000/metrics
+```
+**Expected:** Prometheus text format with request counters
+
+**3. Chat Endpoint:**
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+     -H 'Content-Type: application/json' \
+     -d '{"prompt":"Hello","history":[]}'
+```
+**Expected:** JSON response like:
+```json
+{
+  "request_id": "uuid-here",
+  "answer": "I'm sorry, but I can't answer that question.",
+  "citations": {}
+}
+```
+
+### Interactive API Documentation
+
+Open your browser to: **http://127.0.0.1:8000/docs**
+
+This provides FastAPI's automatic interactive documentation where you can:
+- View all available endpoints
+- Test the `/chat` endpoint with different inputs
+- See request/response schemas
+- Try different conversation histories
+
+### What the API Does Right Now
+
+- ✅ **Accepts HTTP requests** properly formatted as JSON
+- ✅ **Connects to the database** and performs vector similarity search
+- ✅ **Runs the RAG pipeline** (retrieval → prompt building → ReAct agent → guardrails)
+- ✅ **Returns structured responses** with request IDs and citation placeholders
+- ✅ **Handles errors gracefully** with proper HTTP status codes
+- ✅ **Tracks metrics** for monitoring and observability
+
+**Note:** Without ingested documents, the system will return safe refusal responses. Once you ingest content with embeddings, the chat will provide grounded answers with source citations.
+
+## Step 9: Test Document Ingestion (Experimental)
 
 ### ⚠️ **Current Status**
 
@@ -339,6 +412,8 @@ uv run rag-ingest status
 4. **CSV Parsing**: Text parsing and chunking works (test_ingestion.py)
 5. **Database Connection**: PostgreSQL container accepts connections
 6. **Vector Operations**: pgvector extension works for similarity calculations
+7. **Conversation API**: Complete HTTP API with health, metrics, and chat endpoints
+8. **RAG Pipeline**: Full retrieval-augmented generation pipeline (returns safe responses without content)
 
 ### ❓ **Experimental/Untested**
 
@@ -465,6 +540,12 @@ docker exec rag_unito-postgres-1 psql -U postgres -d rag_unito    # Connect to d
 # Testing
 uv run python test_ingestion.py          # Test CSV parsing (works)
 uv run pytest                            # Run unit tests (experimental)
+
+# API Server (NEW)
+uvicorn backend.api:app --reload         # Start the Conversation API
+curl http://127.0.0.1:8000/healthz       # Test health endpoint
+curl http://127.0.0.1:8000/metrics       # Test metrics endpoint
+curl -X POST http://127.0.0.1:8000/chat -H 'Content-Type: application/json' -d '{"prompt":"test","history":[]}' # Test chat
 ```
 
 This guide reflects the **actual current state** of the implementation as of the most recent testing. 

@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Log level")
     log_format: str = Field(default="json", description="Log format (json|text)")
 
+    # Metrics
+    metrics_token: str | None = Field(
+        default=None,
+        description="Bearer token required to access /metrics endpoint. If None, endpoint is public.",
+    )
+
 
 # Global settings instance
 settings = Settings() 

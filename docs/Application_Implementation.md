@@ -48,14 +48,24 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 - ✅ **Chat Orchestrator** (`backend/rag/engine.py`) – ties together retrieval, prompt builder, agent and guardrails.
 - ✅ **Smoke-tests** (`tests/test_prompt_builder.py`, `tests/test_guardrails.py`, `tests/test_react_agent.py`).
 
-### **5. CLI Interface**
+### **5. Conversation API (NEW)**
+- ✅ **FastAPI Application** (`backend/api/__init__.py`) – main app with lifespan management for database cleanup
+- ✅ **API Routes** (`backend/api/routes.py`) – three endpoints with proper error handling:
+  - `GET /healthz` – health check endpoint
+  - `GET /metrics` – Prometheus metrics with optional bearer token protection  
+  - `POST /chat` – main conversational endpoint using RAG engine
+- ✅ **Prometheus Integration** – request counting and standard Python metrics
+- ✅ **Configuration** – added `metrics_token` setting for optional endpoint protection
+- ✅ **Dependencies** – added `prometheus-client>=0.19.0` to `pyproject.toml`
+
+### **6. CLI Interface**
 - ✅ **Typer-based CLI** (`backend/cli.py`) with commands:
   - `rag-ingest ingest` - Ingest documents from CSV metadata file.
   - `rag-ingest status` - Check batch status
   - `rag-ingest list-batches` - List all batches
   - `rag-ingest init-db` - Initialize database tables
 
-### **6. Testing Infrastructure**
+### **7. Testing Infrastructure**
 - ✅ **Basic unit tests**:
   - `tests/test_csv_parser.py` - CSV parsing tests
   - `tests/test_models.py` - Database model tests (require PostgreSQL)
@@ -73,7 +83,7 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 - ❌ **No Database Migrations**: Alembic configured but no actual migration files
 - ✅ **Database Initialization**: `init-db` runs Alembic upgrade and succeeds
 - ❌ **No End-to-End Testing**: ingestion → retrieval → chat still untested with live DB & OpenAI
-- ❌ **No FastAPI Endpoints**: Web API not yet implemented
+- ✅ **FastAPI Endpoints**: Web API implemented with `/healthz`, `/metrics`, and `/chat` endpoints
 - ❌ **No Frontend**: No web interface
 
 ### **Untested Functionality**
@@ -104,6 +114,17 @@ These components should work independently:
    python test_ingestion.py
    ```
 
+4. **Conversation API** (NEW):
+   ```bash
+   # Start the API
+   uvicorn backend.api:app --reload
+   
+   # Test endpoints
+   curl http://127.0.0.1:8000/healthz
+   curl http://127.0.0.1:8000/metrics
+   curl -X POST http://127.0.0.1:8000/chat -H 'Content-Type: application/json' -d '{"prompt":"Hello","history":[]}'
+   ```
+
 ## 📁 **Actual Project Structure**
 
 ```
@@ -114,11 +135,21 @@ rag-unito/
 │   ├── config.py              # Configuration management
 │   ├── database.py            # Database connection setup
 │   ├── models.py              # SQLModel schemas
+│   ├── api/                   # ✅ NEW: FastAPI application
+│   │   ├── __init__.py        # FastAPI app with lifespan management
+│   │   └── routes.py          # API endpoints (/healthz, /metrics, /chat)
+│   ├── rag/                   # ✅ RAG core components
+│   │   ├── schemas.py         # ChatRequest/ChatResponse models
+│   │   ├── engine.py          # Chat orchestrator
+│   │   ├── agent/             # ReAct agent implementation
+│   │   ├── prompt/            # Prompt builder
+│   │   └── guardrails/        # Response validation
 │   └── services/
 │       ├── __init__.py
 │       ├── csv_parser.py      # ✅ CSV parsing logic
 │       ├── text_chunker.py    # ✅ Text chunking logic
 │       ├── embedding_service.py # ✅ OpenAI integration
+│       ├── retrieval_service.py # ✅ Vector similarity search
 │       └── ingestion_service.py # ✅ Pipeline orchestration
 ├── docs/
 │   ├── PRD.md
@@ -171,7 +202,20 @@ python test_ingestion.py
 ```
 This should work and test CSV parsing with your actual data files.
 
-### **2. Individual Service Components**
+### **2. Conversation API (NEW)**
+```bash
+# Start the API
+uvicorn backend.api:app --reload
+
+# In another terminal, test endpoints:
+curl http://127.0.0.1:8000/healthz                    # Should return {"status":"ok"}
+curl http://127.0.0.1:8000/metrics                    # Should return Prometheus metrics
+curl -X POST http://127.0.0.1:8000/chat \
+     -H 'Content-Type: application/json' \
+     -d '{"prompt":"Hello","history":[]}'              # Should return ChatResponse JSON
+```
+
+### **3. Individual Service Components**
 ```python
 # Test CSV parsing
 from backend.services.csv_parser import CSVMetadataParser
@@ -186,7 +230,7 @@ chunks = chunker.chunk_text("Sample text for testing")
 print(f"Created {len(chunks)} chunks")
 ```
 
-### **3. Configuration Loading**
+### **4. Configuration Loading**
 ```python
 from backend.config import get_settings
 settings = get_settings()
@@ -244,13 +288,15 @@ print(f"Database URL: {settings.database_url}")
 - Parse CSV files and extract metadata
 - Chunk text content with different strategies
 - Run vector similarity search via Retrieval Service
-- Build prompts, enforce guardrails, run a ReAct reasoning loop in-memory (with stubbed LLM) and receive grounded answers.
+- Build prompts, enforce guardrails, run a ReAct reasoning loop in-memory (with stubbed LLM) and receive grounded answers
+- **Start a complete HTTP API** with health checks, metrics, and chat endpoints
+- **Test conversational interactions** via HTTP requests (returns safe refusal when no content is ingested)
 
 **What you cannot do yet:**
 - Actually ingest documents into a database (pending migrations/CLI init-db)
 - Generate embeddings (requires OpenAI API key and testing)
-- Chat via HTTP – backend endpoint missing, but chat engine callable from Python after manual DB session setup
-- Deploy or run the application
+- Have meaningful conversations (requires ingested document content with embeddings)
+- Deploy or run the application in production
 
 This document reflects the honest current state of the project as of the last implementation session. 
 
