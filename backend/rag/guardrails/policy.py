@@ -10,7 +10,13 @@ from backend.rag.guardrails.citation import validate_citations
 
 MAX_TOTAL_TOKENS = 6_000  # generous default; model/plan can override
 
-REFUSAL_MSG = "I'm sorry, but I can't answer that question."
+# Different refusal messages for different failure modes
+REFUSAL_NO_DATA = "I couldn't find any information about that in the Emanuele Artom archive yet."
+REFUSAL_GENERIC = "I'm sorry, but I can't answer that question."
+REFUSAL_OUT_OF_SCOPE = "I'm sorry, but I can only answer questions about the Emanuele Artom collection."
+
+# Backward compatibility alias
+REFUSAL_MSG = REFUSAL_GENERIC
 
 
 def apply_guardrails(
@@ -31,14 +37,18 @@ def apply_guardrails(
         try:
             validate_citations(answer_text, citation_map)
         except CitationError:
-            return REFUSAL_MSG
+            # Distinguish between no data available vs citation failure
+            if not citation_map:  # No retrieval results found
+                return REFUSAL_NO_DATA
+            else:  # Sources available but not properly cited
+                return REFUSAL_GENERIC
     else:  # chitchat
         # Reject if it accidentally included citation-like patterns
         if "[" in answer_text and "]" in answer_text:
-            return REFUSAL_MSG
+            return REFUSAL_GENERIC
         # Simple length check (approximate 30 tokens = ~120 characters)
         if len(answer_text) > 120:
-            return REFUSAL_MSG
+            return REFUSAL_GENERIC
 
     if messages is not None:
         if count_tokens(messages) > max_tokens:
