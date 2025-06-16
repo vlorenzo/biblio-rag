@@ -41,29 +41,43 @@ async def chat(
     """
     top_k = top_k or settings.max_retrieval_results
 
+    logger.debug("[chat] Starting chat orchestrator – history={} user_query=\"{}\"", len(history), user_query)
+
     # ------------------------------------------------------------------
     # 1. Retrieval
     # ------------------------------------------------------------------
     hits = await rs.retrieve_similar_chunks(session, user_query, k=top_k)
+    logger.debug("[chat] Retrieved {} hits", len(hits))
 
     # ------------------------------------------------------------------
     # 2. Prompt build
     # ------------------------------------------------------------------
     pb = PromptBuilder()
     system_prompt, messages, citation_map = pb.build(history, user_query, hits)
+    logger.debug("[chat] Prompt built – messages={} citations={}", len(messages), len(citation_map))
 
     # ------------------------------------------------------------------
     # 3. ReAct agent
     # ------------------------------------------------------------------
     agent = ReActAgent()
     answer, used_citations, answer_type = await agent.run(messages, citation_map)
+    logger.debug("[chat] Agent run complete – answer_type={} used_citations={}", answer_type, used_citations)
 
     # ------------------------------------------------------------------
     # 4. Final guardrails (token limit already handled inside agent)
+    #    For chitchat answers we skip the token-budget check because the
+    #    system prompt may include large retrieval context that is irrelevant
+    #    for a short courtesy reply, and we don't want to fail with
+    #    TokenLimitError in that case.
     # ------------------------------------------------------------------
-    final_answer = apply_guardrails(answer, citation_map, messages, answer_type=answer_type)
+    if answer_type == "chitchat":
+        final_answer = apply_guardrails(answer, citation_map, None, answer_type=answer_type)
+    else:
+        final_answer = apply_guardrails(answer, citation_map, messages, answer_type=answer_type)
 
-    logger.info("Chat answered with %s citations", len(used_citations))
+    logger.debug("[chat] Guardrails applied – final_answer_len={} ", len(final_answer))
+
+    logger.info("[chat] Answer ready with {} citations", len(used_citations))
 
     # Only include citations for knowledge answers
     if answer_type == "knowledge":
@@ -74,4 +88,5 @@ async def chat(
     # Add conversation mode to metadata
     meta = {"mode": answer_type}
 
+    logger.debug("[chat] Returning ChatResponse with {} citations", len(selected_citations))
     return ChatResponse(answer=final_answer, citations=selected_citations, meta=meta) 

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore
+from loguru import logger
 
 from backend.database import get_session
 from backend.config import settings
@@ -68,5 +69,6 @@ async def chat_endpoint(
         return response
     except Exception as exc:  # pylint: disable=broad-except
         # Re-raise as 500 so client gets JSON error.
+        logger.exception("[chat_endpoint] Unhandled exception", exc_info=True)
         request_counter.labels("/chat", "POST", "500").inc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc 

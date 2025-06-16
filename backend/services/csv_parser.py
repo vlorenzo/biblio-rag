@@ -254,7 +254,16 @@ class CSVMetadataParser:
             if not ref:
                 continue
             
-            # Try different extensions and paths
+            # --- New rule: search for files starting with base name and .md/.txt ---
+            base_name = Path(ref).stem
+            candidates = list(self.content_base_path.glob(f"{base_name}*.md")) + \
+                         list(self.content_base_path.glob(f"{base_name}*.txt"))
+            if candidates:
+                logger.info(f"[find_content_files] Using new rule: found {candidates[0]} for ref {ref}")
+                found_files.append((ref, candidates[0]))
+                continue
+            
+            # Try different extensions and paths (existing logic)
             possible_paths = [
                 self.content_base_path / ref,
                 self.content_base_path / f"{Path(ref).stem}.txt",

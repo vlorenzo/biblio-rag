@@ -95,7 +95,11 @@ class ReActAgent:
                     answer_type = "knowledge"
                     answer_text = argument or ""
                 
-                guarded_answer = apply_guardrails(answer_text, citation_map, messages, answer_type=answer_type)
+                # Skip token-budget check for chitchat just like engine does
+                if answer_type == "chitchat":
+                    guarded_answer = apply_guardrails(answer_text, citation_map, None, answer_type=answer_type)
+                else:
+                    guarded_answer = apply_guardrails(answer_text, citation_map, messages, answer_type=answer_type)
                 citation_indexes = _extract_citation_indexes(guarded_answer)
                 return guarded_answer, sorted(citation_indexes), answer_type
 
