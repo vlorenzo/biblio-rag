@@ -67,6 +67,21 @@
 
 **Note**: Streaming responses via SSE was not implemented (kept simple as requested)
 
+### Phase 4.1 – Conversation Modes Enhancement (June 2025) ✅ **COMPLETED**
+1. ✅ **Enhanced Prompt Template** (`backend/rag/prompt/builder.py`) – added conversation mode definitions and output format specifications
+2. ✅ **Updated ReAct Agent** (`backend/rag/agent/react_agent.py`) – enhanced regex parsing to capture `Final(type=chitchat/knowledge):` format
+3. ✅ **Enhanced Guardrails** (`backend/rag/guardrails/policy.py`) – added chitchat-specific constraints (no citations, length limits)
+4. ✅ **Updated Orchestrator** (`backend/rag/engine.py`) – mode-aware citation handling and guardrail application
+5. ✅ **Enhanced Tests** (`tests/test_react_agent.py`) – added chitchat mode test coverage
+6. ✅ **Verified Functionality** – manual testing confirms proper mode detection and response handling
+
+**Implementation Details:**
+- **Chitchat Mode**: Handles greetings/thanks/farewells with brief, polite responses that redirect to collection scope
+- **Knowledge Mode**: Maintains existing behavior requiring citations for factual claims
+- **Scope Enforcement**: Out-of-scope questions receive polite refusal directing users back to the Emanuele Artom collection
+- **Single Pipeline**: No regex routing; agent autonomously decides conversation mode
+- **Backward Compatibility**: Existing functionality unchanged; new mode detection gracefully falls back to knowledge mode
+
 ### Phase 5 – Frontend Chat UI (optional, 1 day) 🔄 PENDING
 1. Minimal HTML + Alpine.js / React (Vite)  
 2. SSE stream handler, markdown render, citation sidebar  
@@ -109,7 +124,7 @@
 ## 6. Risk & Mitigation
 • **OpenAI rate limits** → async back-off & local retry queue ✅ IMPLEMENTED  
 • **Metadata inconsistencies** → strict schema + validators ✅ IMPLEMENTED  
-• **Hallucinations** → enforce retrieval grounding & answer rejection template 🔄 PENDING  
+• **Hallucinations** → enforce retrieval grounding & answer rejection template + conversation mode boundaries ✅ IMPLEMENTED  
 • **Vendor lock-in** → abstract LLM/Embedding provider behind thin interface ✅ IMPLEMENTED  
 
 ## 7. Original Plan vs Actual Implementation
@@ -206,3 +221,24 @@ The API is production-ready for basic conversational interactions. When the data
 5. Apply guardrails to prevent hallucination
 
 Without ingested content, the system safely returns "I can't answer that question" responses.
+
+### **Phase 4.1 Enhancement Notes (June 2025)**
+
+#### **Unplanned Enhancement: Conversation Mode Intelligence**
+- **Original Phase 4 Plan**: Basic chat endpoint with simple refusal for unanswerable questions
+- **Actual Implementation**: Intelligent conversation mode detection with chitchat vs knowledge distinction
+- **Rationale**: User testing revealed that refusing greetings like "Hello" created poor UX; academic project needed polite but scoped interaction
+- **Impact**: Much better user experience while maintaining strict academic standards for factual information
+
+#### **Key Design Decisions Made**
+- **Single-Pipeline Approach**: Rejected regex-based routing in favor of LLM-based mode detection to maintain agentic architecture
+- **Scope Boundaries**: Implemented firm but polite redirection to collection scope rather than open-ended conversation
+- **Backward Compatibility**: All existing functionality preserved; new mode detection gracefully degrades
+- **Simple Implementation**: ~2 hours of focused work touching only 4 core modules + tests
+
+#### **Verified Behavior Examples**
+- `"Hello"` → `"Hi! How can I help you with the Emanuele Artom collection?"` (chitchat mode)
+- `"Where are Apple offices?"` → `"I'm sorry, but I can only answer questions about the Emanuele Artom collection."` (out-of-scope refusal)
+- `"Who was Emanuele Artom?"` → Proper knowledge answer with citations when corpus available (knowledge mode)
+
+This enhancement was not in the original plan but emerged from user experience considerations during testing. It demonstrates the value of iterative development and user feedback in academic software projects.

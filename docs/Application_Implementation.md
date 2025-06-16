@@ -93,7 +93,7 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 
 ## 🔧 **What Actually Works (Verified)**
 
-### **New Conversation Modes (December 2024)**
+### **New Conversation Modes (June 2025)**
 The system now supports intelligent conversation management:
 
 **Chitchat Mode:**
