@@ -65,12 +65,13 @@ async def chat(
 
     logger.info("Chat answered with %s citations", len(used_citations))
 
-    from uuid import uuid4
-
     # Only include citations for knowledge answers
     if answer_type == "knowledge":
-        selected_citations = {idx: citation_map[idx] for idx in used_citations if idx in citation_map}
+        selected_citations = [citation_map[idx] for idx in used_citations if idx in citation_map]
     else:
-        selected_citations = {}
+        selected_citations = []
 
-    return ChatResponse(request_id=uuid4(), answer=final_answer, citations=selected_citations) 
+    # Add conversation mode to metadata
+    meta = {"mode": answer_type}
+
+    return ChatResponse(answer=final_answer, citations=selected_citations, meta=meta) 

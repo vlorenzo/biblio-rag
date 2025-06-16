@@ -66,18 +66,41 @@ rag-ingest status --batch-id <batch-id>
 
 ```bash
 # Start the API server
-uvicorn backend.main:app --reload
+uvicorn backend.api:app --reload
 ```
+
+#### Frontend Chat UI
+
+```bash
+# Navigate to frontend directory and install dependencies
+cd frontend
+npm install
+
+# Start the development server
+npm run dev
+```
+
+The frontend will be available at `http://localhost:3000` and will connect to the backend API at `http://127.0.0.1:8000`.
 
 ## Project Structure
 
 ```
 ├── backend/           # Python backend package
+│   ├── api/          # FastAPI application and routes
+│   ├── rag/          # RAG engine and conversation logic
+│   ├── services/     # Business logic services
 │   ├── models.py     # SQLModel database models
 │   ├── database.py   # Database connection management
 │   ├── config.py     # Configuration management
 │   └── cli.py        # Typer CLI application
-├── frontend/         # Frontend package (future)
+├── frontend/         # React + TypeScript frontend
+│   ├── src/          # Frontend source code
+│   │   ├── components/  # React components
+│   │   ├── hooks/       # Custom React hooks
+│   │   ├── lib/         # Utility libraries
+│   │   └── pages/       # Page components
+│   ├── package.json  # Node.js dependencies
+│   └── README.md     # Frontend documentation
 ├── infra/           # Infrastructure configuration
 ├── migrations/      # Alembic database migrations
 ├── docs/           # Documentation

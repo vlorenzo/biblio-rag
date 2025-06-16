@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply antialiased;
+  }
+  
+  /* Custom scrollbar styles */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-archive-gray-100;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-archive-gray-300 rounded-md;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-archive-gray-400;
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  .message-bubble {
+    @apply rounded-lg px-4 py-3 max-w-4xl;
+  }
+  
+  .message-user {
+    @apply bg-archive-blue-500 text-white ml-auto;
+  }
+  
+  .message-assistant {
+    @apply bg-white border border-archive-gray-200 mr-auto;
+  }
+  
+  .citation-link {
+    @apply text-archive-blue-600 hover:text-archive-blue-700 cursor-pointer font-medium;
+  }
+  
+  .mode-badge {
+    @apply px-2 py-1 text-xs font-medium rounded-md;
+  }
+  
+  .mode-chitchat {
+    @apply bg-green-100 text-green-800;
+  }
+  
+  .mode-knowledge {
+    @apply bg-archive-blue-100 text-archive-blue-800;
+  }
+} 

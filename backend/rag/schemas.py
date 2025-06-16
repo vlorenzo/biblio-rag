@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import List, Dict, Any
-from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -23,13 +22,12 @@ class ChatMessage(BaseModel):
     role: Role
     content: str
 
-    model_config = ConfigDict(populate_by_name=True, use_enum_values=True)
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ChatRequest(BaseModel):
     """Incoming request from client or tests."""
 
-    id: UUID = Field(default_factory=uuid4)
     history: List[ChatMessage] = Field(default_factory=list)
     prompt: str = Field(..., description="User question")
 
@@ -37,6 +35,6 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """Outgoing RAG answer."""
 
-    request_id: UUID
     answer: str
-    citations: Dict[int, Any]  # int index → arbitrary citation payload 
+    citations: List[Dict[str, Any]]  # List of citation objects
+    meta: Dict[str, Any] = Field(default_factory=dict)  # Optional metadata like mode, token usage 
