@@ -50,6 +50,7 @@ class Settings(BaseSettings):
 
     # RAG
     max_retrieval_results: int = Field(default=5, description="Max retrieval results")
+    max_chunk_distance: float = Field(default=0.85, description="Max cosine distance for chunk retrieval")
     similarity_threshold: float = Field(
         default=0.7, description="Similarity threshold for retrieval"
     )

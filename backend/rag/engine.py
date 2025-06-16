@@ -16,6 +16,7 @@ from backend.rag.schemas import ChatMessage, ChatResponse
 from backend.rag.prompt import PromptBuilder
 from backend.rag.agent import ReActAgent
 from backend.rag.guardrails import apply_guardrails
+from backend.rag.intent import classify_intent
 from backend.services import retrieval_service as rs
 from backend.config import settings
 
@@ -44,10 +45,27 @@ async def chat(
     logger.debug("[chat] Starting chat orchestrator – history={} user_query=\"{}\"", len(history), user_query)
 
     # ------------------------------------------------------------------
-    # 1. Retrieval
+    # 0. Intent classification
     # ------------------------------------------------------------------
-    hits = await rs.retrieve_similar_chunks(session, user_query, k=top_k)
-    logger.debug("[chat] Retrieved {} hits", len(hits))
+    intent = await classify_intent(user_query)
+    logger.debug("[chat] Intent classified as: {}", intent)
+
+    if intent == "chitchat":
+        # Skip retrieval for chitchat - build minimal context
+        hits = []
+        logger.debug("[chat] Skipping retrieval for chitchat")
+    else:
+        # ------------------------------------------------------------------
+        # 1. Retrieval (only for knowledge queries)
+        # ------------------------------------------------------------------
+        hits = await rs.retrieve_similar_chunks(session, user_query, k=top_k)
+        logger.debug("[chat] Retrieved {} hits for prompt building", len(hits))
+        
+        # Log final hits that will be used in prompt
+        for i, (chunk, distance) in enumerate(hits, 1):
+            title = getattr(chunk.document, 'title', 'Unknown') if chunk.document else 'No document'
+            logger.debug("[chat]   Hit #{}: distance={:.4f} title='{}'", 
+                       i, distance, title[:60])
 
     # ------------------------------------------------------------------
     # 2. Prompt build

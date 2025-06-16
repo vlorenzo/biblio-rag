@@ -20,6 +20,7 @@ unit-tests can monkey-patch it without touching global state.
 from __future__ import annotations
 
 import re
+import json
 from typing import Dict, List, Tuple, Optional
 
 from loguru import logger
@@ -66,11 +67,17 @@ class ReActAgent:
         last_observation: Optional[str] = None
 
         for step in range(cfg.MAX_STEPS):
-            react_prompt = self._build_react_prompt(messages, scratchpad, last_observation)
+            # For the first step, use the original messages
+            # For subsequent steps, we'd need to modify the last user message to include scratchpad
+            if step == 0:
+                current_messages = messages
+            else:
+                # For now, just use original messages - proper ReAct loop would need more work
+                current_messages = messages
+                
+            logger.debug("ReAct step %s with {} messages", step + 1, len(current_messages))
 
-            logger.debug("ReAct step %s prompt size=%s chars", step + 1, len(react_prompt))
-
-            llm_response = await self._llm_call(react_prompt)
+            llm_response = await self._llm_call(current_messages)
 
             action, argument = _parse_action(llm_response)
 
@@ -110,35 +117,44 @@ class ReActAgent:
     # Internals
     # -------------------------------------------------------------------
 
-    async def _llm_call(self, prompt: str) -> str:
+    async def _llm_call(self, messages: List[Dict[str, str]]) -> str:
         """Single ChatCompletion call – kept overridable for tests."""
         if self._client is None:
             logger.warning("OpenAI client not available – returning dummy Answer")
             return "Thought: nothing to do\nAction: Answer\nFinal: I'm sorry, but I can't answer that question."
 
-        response = await self._client.chat.completions.create(
-            model=settings.openai_chat_model,
-            temperature=self.temperature,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.choices[0].message.content  # type: ignore[attr-defined]
-
-    def _build_react_prompt(
-        self,
-        messages: List[Dict[str, str]],
-        scratchpad: List[str],
-        observation: Optional[str],
-    ) -> str:
-        prompt_lines: List[str] = []
-        # Convert messages into a simple assistant format.
-        for msg in messages:
-            role = msg["role"].upper()
-            prompt_lines.append(f"{role}: {msg['content']}")
-        if observation:
-            prompt_lines.append(f"Observation: {observation}")
-        prompt_lines.extend(scratchpad)
-        prompt_lines.append("Thought: …")
-        return "\n".join(prompt_lines)
+        # Prepare API request - use the structured messages directly
+        api_request = {
+            "model": settings.openai_chat_model,
+            "temperature": self.temperature,
+            "messages": messages  # ✅ Pass the structured messages array
+        }
+        
+        logger.debug("=== REACT AGENT API CALL ===")
+        logger.debug("Request: {}", json.dumps(api_request, indent=2))
+        
+        response = await self._client.chat.completions.create(**api_request)
+        
+        # Log the full response
+        response_content = response.choices[0].message.content
+        logger.debug("Response: {}", json.dumps({
+            "model": response.model,
+            "choices": [{
+                "message": {
+                    "role": response.choices[0].message.role,
+                    "content": response_content
+                },
+                "finish_reason": response.choices[0].finish_reason
+            }],
+            "usage": {
+                "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
+                "completion_tokens": response.usage.completion_tokens if response.usage else None,
+                "total_tokens": response.usage.total_tokens if response.usage else None
+            }
+        }, indent=2))
+        logger.debug("=== END REACT AGENT API CALL ===")
+        
+        return response_content  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------

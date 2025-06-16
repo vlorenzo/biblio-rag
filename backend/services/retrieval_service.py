@@ -25,6 +25,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.models import Chunk, Document
 from backend.services.embedding_service import get_embedding_service
+from backend.config import settings
 
 # ---------------------------------------------------------------------------
 # Low-level search
@@ -72,24 +73,54 @@ async def search_similar_chunks(
     if document_class is not None:
         stmt = stmt.where(Document.document_class == document_class)
 
-    if min_score is not None:
-        stmt = stmt.where(distance_expr <= min_score)
+    # First get all results without distance filtering for logging
+    stmt_unfiltered = (
+        select(Chunk, distance_expr)
+        .join(Document, Document.id == Chunk.document_id)
+        .options(selectinload(Chunk.document))
+        .order_by("distance")
+        .limit(k)
+    )
+    
+    if document_class is not None:
+        stmt_unfiltered = stmt_unfiltered.where(Document.document_class == document_class)
+    
+    # Apply distance threshold from settings if no explicit min_score provided
+    effective_threshold = min_score if min_score is not None else settings.max_chunk_distance
+    stmt = stmt_unfiltered
+    if effective_threshold is not None:
+        stmt = stmt.where(distance_expr <= effective_threshold)
 
-    # NOTE: Depending on the SQLAlchemy version / DB driver combination the
-    # rows returned by `session.execute` can be either:
-    #   1. sqlalchemy.engine.Row / RowMapping  – supports attribute access
-    #      (e.g. `row.distance`) **and** positional access (`row[0]`).
-    #   2. A plain tuple `(chunk, distance)` when using the async pg driver.
-    #   3. In very old versions, a single scalar (distance) if the ORM entity
-    #      failed to be included in the SELECT list (edge-case we observed in
-    #      production).
-    # To avoid brittle positional access we explicitly unpack the tuple when
-    # possible and fall back to attribute access.  Any row that doesn't match
-    # the expected structure will be skipped with a warning rather than
-    # crashing the whole request.
-
+    # Execute both queries for comparison logging
+    result_unfiltered = await session.execute(stmt_unfiltered)
+    rows_unfiltered = result_unfiltered.all()
+    
     result = await session.execute(stmt)
     rows = result.all()
+
+    # Log unfiltered results for analysis
+    logger.debug("[retrieval] Found {} total chunks before distance filtering:", len(rows_unfiltered))
+    for i, row in enumerate(rows_unfiltered[:10]):  # Log first 10 for brevity
+        try:
+            if isinstance(row, (tuple, list)) and len(row) >= 2:
+                chunk, distance = row[0], row[1]
+            elif hasattr(row, "_mapping"):
+                chunk = row[0]
+                distance = row.distance
+            else:
+                continue
+                
+            if isinstance(chunk, Chunk) and isinstance(distance, (int, float)):
+                title = getattr(chunk.document, 'title', 'Unknown') if chunk.document else 'No document'
+                logger.debug("[retrieval]   #{}: distance={:.4f} title='{}'", 
+                           i+1, float(distance), title[:60])
+        except Exception:
+            continue
+    
+    if effective_threshold is not None:
+        filtered_count = len(rows_unfiltered) - len(rows)
+        logger.info("[retrieval] Distance filter (≤{:.2f}): kept {}/{} chunks (filtered out {})", 
+                   effective_threshold, len(rows), len(rows_unfiltered), filtered_count)
 
     hits: List[Tuple[Chunk, float]] = []
     for row in rows:
@@ -124,7 +155,7 @@ async def search_similar_chunks(
 
             hits.append((chunk, float(distance)))
         except Exception as ex:  # pragma: no cover – defensive guard
-            logger.warning("[retrieval_service] Skipping invalid row in similarity query: %s", ex)
+            logger.warning("[retrieval_service] Skipping invalid row in similarity query: {}", ex)
 
     return hits
 
@@ -144,8 +175,8 @@ async def retrieve_similar_chunks(
     """Embed plain text and return similar chunks with distances."""
     embedder = get_embedding_service()
 
-    logger.debug("Generating embedding for query text (length = %s)", len(query_text))
+    logger.debug("Generating embedding for query text (length = {})", len(query_text))
     query_emb = embedder.get_embedding(query_text)
 
     logger.debug("Running similarity search on chunks …")
-    return await search_similar_chunks(session, query_emb, k, min_score, document_class) 
+    return await search_similar_chunks(session, query_emb, k, min_score, document_class)

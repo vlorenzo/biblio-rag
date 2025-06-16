@@ -8,8 +8,10 @@ principles documented in `docs/Prompt_Builder_Design_Notes.md`.
 from __future__ import annotations
 
 import textwrap
+import json
 from typing import List, Dict, Tuple
 
+from loguru import logger
 from backend.models import Chunk, DocumentClass
 from backend.rag.schemas import ChatMessage, Role
 
@@ -113,6 +115,23 @@ class PromptBuilder:
 
         # add final user query
         messages.append({"role": Role.USER.value, "content": user_query})
+
+        # Debug logging
+        logger.debug("=== PROMPT BUILDER OUTPUT ===")
+        logger.debug("System prompt length: {} chars", len(system_prompt))
+        logger.debug("Total messages: {}", len(messages))
+        logger.debug("Citation map entries: {}", len(citation_map))
+        
+        # Log the complete system prompt (truncated if too long)
+        if len(system_prompt) > 2000:
+            logger.debug("System prompt (first 1000 chars): {}", system_prompt[:1000])
+            logger.debug("System prompt (last 1000 chars): {}", system_prompt[-1000:])
+        else:
+            logger.debug("Complete system prompt: {}", system_prompt)
+        
+        # Log all messages in a structured way
+        logger.debug("Complete messages structure: {}", json.dumps(messages, indent=2))
+        logger.debug("=== END PROMPT BUILDER OUTPUT ===")
 
         return system_prompt, messages, citation_map
 

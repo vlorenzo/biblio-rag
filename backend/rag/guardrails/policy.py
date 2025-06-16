@@ -8,7 +8,7 @@ from backend.rag.guardrails.token_utils import count_tokens
 from backend.rag.guardrails.errors import TokenLimitError, CitationError
 from backend.rag.guardrails.citation import validate_citations
 
-MAX_TOTAL_TOKENS = 6_000  # generous default; model/plan can override
+MAX_TOTAL_TOKENS = 25_000  # generous default; model/plan can override
 
 # Different refusal messages for different failure modes
 REFUSAL_NO_DATA = "I couldn't find any information about that in the Emanuele Artom archive yet."
