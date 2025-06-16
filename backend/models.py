@@ -9,6 +9,7 @@ from pathlib import Path
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, func, JSON
 from sqlmodel import Field, Relationship, SQLModel, Session
+import sqlalchemy as sa
 
 
 class DocumentClass(str, Enum):
@@ -45,7 +46,13 @@ class Document(BaseModel, table=True):
 
     title: str = Field(index=True)
     author: Optional[str] = Field(default=None, index=True)
-    document_class: DocumentClass = Field(index=True)
+    document_class: DocumentClass = Field(
+        sa_column=Column(
+            sa.Enum(DocumentClass, name="documentclass", values_callable=lambda obj: [e.value for e in obj]),
+            nullable=False,
+            index=True,
+        )
+    )
     publication_year: Optional[int] = Field(default=None, index=True)
     publisher: Optional[str] = Field(default=None)
     isbn: Optional[str] = Field(default=None)
@@ -84,7 +91,14 @@ class Batch(BaseModel, table=True):
     __tablename__ = "batches"
 
     name: str = Field(index=True)
-    status: BatchStatus = Field(default=BatchStatus.PENDING, index=True)
+    status: BatchStatus = Field(
+        sa_column=Column(
+            sa.Enum(BatchStatus, name="batchstatus", values_callable=lambda obj: [e.value for e in obj]),
+            nullable=False,
+            default=BatchStatus.PENDING,
+            index=True,
+        )
+    )
     parameters: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))  # Chunking parameters
     total_documents: int = Field(default=0)
     processed_documents: int = Field(default=0)

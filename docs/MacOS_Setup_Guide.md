@@ -200,7 +200,7 @@ Edit `.env` file with your specific settings:
 
 ```bash
 # Database Configuration (Docker setup)
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/rag_unito
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/rag_unito
 
 # OpenAI Configuration (REQUIRED - get from OpenAI Platform)
 OPENAI_API_KEY=your_openai_api_key_here
@@ -245,7 +245,7 @@ LOG_FORMAT=json
 uv run rag-ingest --help
 
 # Initialise database tables
-uv run rag-ingest init-db
+uv run rag-ingest init-db   # Alembic upgrade runs
 
 # List batches / check status
 uv run rag-ingest list-batches

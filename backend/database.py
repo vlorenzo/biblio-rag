@@ -54,4 +54,37 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def close_db() -> None:
     """Close database connections."""
-    await engine.dispose() 
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Alembic migration helper
+# ---------------------------------------------------------------------------
+
+
+async def init_db() -> None:
+    """Apply Alembic migrations up to the latest head.
+
+    This helper wraps Alembic's `upgrade head` command so that the database
+    schema is created (including extensions and indexes) in a consistent,
+    version-controlled way rather than relying on `SQLModel.metadata.create_all`.
+    """
+
+    import asyncio
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    # Resolve path to alembic.ini relative to project root (two levels up).
+    alembic_ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
+
+    def _run_upgrade() -> None:  # runs in executor to avoid blocking event loop
+        cfg = Config(str(alembic_ini_path))
+        # Ensure we use the same DB URL as the application settings (incl. port)
+        from backend.config import settings as _settings
+        cfg.set_main_option("sqlalchemy.url", _settings.database_url)
+        command.upgrade(cfg, "head")
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _run_upgrade) 

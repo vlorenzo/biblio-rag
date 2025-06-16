@@ -17,7 +17,7 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 - ✅ **Complete schema**: Documents, ContentFiles, Chunks, Batches models in `backend/models.py`
 - ✅ **pgvector integration**: Vector field for embeddings
 - ✅ **Alembic setup**: Basic configuration in `alembic.ini` and `migrations/env.py`
-- ❌ **No actual migrations**: No migration files in `migrations/versions/`
+- ✅ **Database migrations**: Initial schema and enum revisions present (`0001`, `0002`, `0003`).
 
 ### **3. Core Services**
 - ✅ **CSV Parser** (`backend/services/csv_parser.py`): 
@@ -71,14 +71,14 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 ### **Missing Core Components**
 - ❌ **No Git Repository**: Code exists only locally, never pushed to any repo
 - ❌ **No Database Migrations**: Alembic configured but no actual migration files
-- ❌ **No Database Initialization**: `init-db` command exists but untested
+- ✅ **Database Initialization**: `init-db` runs Alembic upgrade and succeeds
 - ❌ **No End-to-End Testing**: ingestion → retrieval → chat still untested with live DB & OpenAI
 - ❌ **No FastAPI Endpoints**: Web API not yet implemented
 - ❌ **No Frontend**: No web interface
 
 ### **Untested Functionality**
 - ❌ **OpenAI Integration**: Embedding service and ReAct agent call rely on API key; only stubbed in tests
-- ❌ **Full Pipeline**: End-to-end ingestion + retrieval + chat not yet validated
+- ✅ **Metadata Ingestion**: Ingest script loads CSV metadata; chunk/embedding path pending text files
 
 ## 🔧 **What Actually Works (Probably)**
 
@@ -146,9 +146,7 @@ rag-unito/
 ## 🚨 **Critical Missing Pieces**
 
 ### **1. Database Setup**
-- **Problem**: No actual database migrations exist
-- **Impact**: `rag-ingest init-db` command will likely fail
-- **Status**: Models defined but database creation untested
+- **Solved**: Alembic migrations added; `init-db` succeeds against fresh Postgres
 
 ### **2. Git Repository**
 - **Problem**: No remote repository exists

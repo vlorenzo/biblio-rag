@@ -41,7 +41,7 @@ class IngestionService:
         batch = Batch(
             name=name,
             parameters=parameters,
-            status=BatchStatus.PENDING,
+            status=BatchStatus.PENDING.value,
         )
         
         self.session.add(batch)
@@ -58,7 +58,7 @@ class IngestionService:
         error_message: Optional[str] = None,
     ) -> None:
         """Update batch status."""
-        batch.status = status
+        batch.status = status.value if isinstance(status, BatchStatus) else status
         
         if status == BatchStatus.PROCESSING and not batch.started_at:
             batch.started_at = datetime.utcnow()
@@ -73,7 +73,12 @@ class IngestionService:
     
     async def save_document(self, document_data: DocumentCreate) -> Document:
         """Save document to database."""
-        document = Document(**document_data.model_dump())
+        document = Document(
+            **{
+                **document_data.model_dump(exclude={"document_class"}),
+                "document_class": document_data.document_class.value,
+            }
+        )
         
         self.session.add(document)
         await self.session.flush()  # Get ID without committing

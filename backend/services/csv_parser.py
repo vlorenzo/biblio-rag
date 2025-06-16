@@ -112,8 +112,8 @@ class CSVMetadataParser:
             
         year_str = str(year_str).strip()
         
-        # Extract 4-digit year
-        year_match = re.search(r'\b(1[5-9]\d{2}|20\d{2})\b', year_str)
+        # Look for a 4-digit year even if it is prefixed by a letter like "c" (circa)
+        year_match = re.search(r'(1[5-9]\d{2}|20\d{2})', year_str)
         if year_match:
             return int(year_match.group(1))
         

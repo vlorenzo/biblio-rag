@@ -7,7 +7,8 @@ from typing import Optional
 import typer
 from loguru import logger
 
-from backend.database import get_session, create_tables
+from backend.database import get_session
+from backend.database import init_db as run_migrations
 from backend.services.ingestion_service import IngestionService
 
 app = typer.Typer(
@@ -133,17 +134,6 @@ async def list_all_batches() -> None:
             raise typer.Exit(1)
 
 
-async def initialize_database() -> None:
-    """Initialize database tables."""
-    try:
-        typer.echo("Initializing database tables...")
-        await create_tables()
-        typer.echo("✅ Database initialized successfully!")
-    except Exception as e:
-        typer.echo(f"❌ Database initialization failed: {e}", err=True)
-        raise typer.Exit(1)
-
-
 @app.command()
 async def ingest(
     csv_file: str = typer.Argument(..., help="Path to CSV metadata file"),
@@ -172,9 +162,15 @@ async def list_batches() -> None:
 
 
 @app.command()
-async def init_db() -> None:
+def init_db() -> None:
     """Initialize database tables."""
-    await initialize_database()
+    try:
+        typer.echo("Running Alembic migrations …")
+        asyncio.run(run_migrations())
+        typer.echo("✅ Database schema is up to date!")
+    except Exception as e:
+        typer.echo(f"❌ Database initialization failed: {e}", err=True)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
