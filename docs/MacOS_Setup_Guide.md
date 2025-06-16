@@ -295,16 +295,58 @@ Total chunks: 0
 
 Le parti restanti della guida restano valide; dove veniva citato `rag-ingest ingest` sostituiscilo con lo script `ingest.py`.
 
-## Step 8: Test the Conversation API (NEW)
+## Step 8: Frontend Chat Interface Setup (NEW)
 
-### ✅ **Confirmed Working**
+### ✅ **Complete Web Application**
 
-The Conversation API is now fully implemented and can be tested immediately.
+The system now includes a full React + TypeScript frontend that provides a modern chat interface for the Emanuele Artom archive.
 
-### Start the API Server
+### Install Node.js and Frontend Dependencies
 
+**Prerequisites:**
+- Node.js ≥ 18 (check with `node --version`)
+- npm (comes with Node.js)
+
+**Install Node.js (if not present):**
 ```bash
-# Make sure you're in the project directory with activated venv
+# Using Homebrew (recommended)
+brew install node
+
+# Or download from https://nodejs.org/
+```
+
+**Install Frontend Dependencies:**
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Verify installation
+npm run build
+```
+
+**Expected output:**
+```
+✓ 1626 modules transformed.
+dist/index.html                   0.97 kB │ gzip:   0.53 kB
+dist/assets/index-UkZg6WcM.css   34.23 kB │ gzip:   5.64 kB
+dist/assets/index-D9-984NK.js   322.04 kB │ gzip: 100.05 kB │ map: 1,386.03 kB
+✓ built in 988ms
+```
+
+## Step 9: Test the Complete Application
+
+### ✅ **End-to-End Testing**
+
+Test the complete frontend + backend system.
+
+### Start Both Backend and Frontend
+
+**Terminal 1 - Start Backend API:**
+```bash
+# Make sure you're in the project root directory
 uvicorn backend.api:app --reload
 ```
 
@@ -318,33 +360,57 @@ INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 ```
 
-### Test the Three API Endpoints
-
-**1. Health Check:**
+**Terminal 2 - Start Frontend Development Server:**
 ```bash
+# Navigate to frontend directory
+cd frontend
+
+# Start the development server
+npm run dev
+```
+
+**Expected output:**
+```
+  VITE v5.4.19  ready in 75 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+```
+
+### Test the Complete Web Application
+
+**1. Open the Chat Interface:**
+- Open your browser and navigate to: **http://localhost:3000**
+- You should see the "Emanuele Artom Archive" chat interface
+
+**2. Test Conversation Modes:**
+
+**Chitchat Mode:**
+```
+Type: "Hello"
+Expected: "Hi! How can I help you with the Emanuele Artom collection?"
+```
+
+**Knowledge Mode (Empty Archive):**
+```
+Type: "Who was Emanuele Artom?"
+Expected: "I couldn't find any information about that in the Emanuele Artom archive yet."
+```
+
+**3. Verify Interface Features:**
+- ✅ **Message Input**: Text area auto-resizes as you type
+- ✅ **Send Button**: Click or press Enter to send messages
+- ✅ **Mode Indicator**: Header shows conversation mode (Conversational/Knowledge)
+- ✅ **Sources Sidebar**: Click menu (☰) to toggle sources panel
+- ✅ **Error Handling**: Network errors display dismissible error banners
+- ✅ **Responsive Design**: Try resizing browser window
+
+**4. Test API Health (Optional):**
+```bash
+# Test backend health directly
 curl http://127.0.0.1:8000/healthz
-```
-**Expected:** `{"status":"ok"}`
-
-**2. Metrics (Prometheus format):**
-```bash
-curl http://127.0.0.1:8000/metrics
-```
-**Expected:** Prometheus text format with request counters
-
-**3. Chat Endpoint:**
-```bash
-curl -X POST http://127.0.0.1:8000/chat \
-     -H 'Content-Type: application/json' \
-     -d '{"prompt":"Hello","history":[]}'
-```
-**Expected:** JSON response like:
-```json
-{
-  "request_id": "uuid-here",
-  "answer": "I'm sorry, but I can't answer that question.",
-  "citations": {}
-}
+# Expected: {"status":"ok"}
 ```
 
 ### Interactive API Documentation
@@ -357,16 +423,24 @@ This provides FastAPI's automatic interactive documentation where you can:
 - See request/response schemas
 - Try different conversation histories
 
-### What the API Does Right Now
+### What the Complete Application Does Right Now
 
-- ✅ **Accepts HTTP requests** properly formatted as JSON
-- ✅ **Connects to the database** and performs vector similarity search
-- ✅ **Runs the RAG pipeline** (retrieval → prompt building → ReAct agent → guardrails)
-- ✅ **Returns structured responses** with request IDs and citation placeholders
-- ✅ **Handles errors gracefully** with proper HTTP status codes
-- ✅ **Tracks metrics** for monitoring and observability
+**Frontend Features:**
+- ✅ **Modern Chat Interface**: Professional, responsive web application
+- ✅ **Real-time Messaging**: Instant communication with backend API
+- ✅ **Conversation Intelligence**: Automatic detection of chitchat vs knowledge queries
+- ✅ **Citation System**: Inline numbered citations with expandable sources sidebar
+- ✅ **Error Recovery**: Graceful handling of network issues and API errors
+- ✅ **Academic Design**: Appropriate styling for scholarly content
 
-**Note:** Without ingested documents, the system will return safe refusal responses. Once you ingest content with embeddings, the chat will provide grounded answers with source citations.
+**Backend Capabilities:**
+- ✅ **Complete RAG Pipeline**: Retrieval → prompt building → ReAct agent → guardrails
+- ✅ **Database Integration**: Vector similarity search with PostgreSQL + pgvector
+- ✅ **API Endpoints**: Health checks, metrics, and chat functionality
+- ✅ **CORS Support**: Proper cross-origin resource sharing for web clients
+- ✅ **Enhanced UX**: Improved error messages that distinguish "no data" vs "out of scope"
+
+**Note:** Without ingested documents, the system returns helpful messages like "I couldn't find any information about that in the Emanuele Artom archive yet." Once you ingest content with embeddings, the chat will provide grounded answers with source citations.
 
 ## Step 9: Test Document Ingestion (Experimental)
 
@@ -406,28 +480,29 @@ uv run rag-ingest status
 
 ### ✅ **Confirmed Working**
 
-1. **Docker Setup**: PostgreSQL + pgvector container starts and works
-2. **Python Environment**: uv sync creates working virtual environment
-3. **CLI Commands**: All CLI help commands work
-4. **CSV Parsing**: Text parsing and chunking works (test_ingestion.py)
-5. **Database Connection**: PostgreSQL container accepts connections
-6. **Vector Operations**: pgvector extension works for similarity calculations
-7. **Conversation API**: Complete HTTP API with health, metrics, and chat endpoints
-8. **RAG Pipeline**: Full retrieval-augmented generation pipeline (returns safe responses without content)
+1. **Complete Web Application**: Full React + TypeScript frontend at `http://localhost:3000`
+2. **End-to-End Communication**: Frontend ↔ Backend API ↔ Database pipeline
+3. **Conversation Intelligence**: Chitchat vs knowledge mode detection with proper responses
+4. **Professional UI**: Modern chat interface with citations, error handling, responsive design
+5. **Docker Setup**: PostgreSQL + pgvector container starts and works
+6. **Python Environment**: uv sync creates working virtual environment
+7. **CLI Commands**: All CLI help commands work
+8. **CSV Parsing**: Text parsing and chunking works (test_ingestion.py)
+9. **Database Connection**: PostgreSQL container accepts connections
+10. **Vector Operations**: pgvector extension works for similarity calculations
+11. **CORS Integration**: Frontend and backend communicate properly
 
 ### ❓ **Experimental/Untested**
 
 1. **Database Initialization**: `init-db` command exists but not fully tested
-2. **Full Ingestion Pipeline**: End-to-end document ingestion not verified
-3. **OpenAI Integration**: Embedding service exists but requires API key and testing
-4. **Batch Management**: Status and listing commands exist but not tested
+2. **Full Ingestion Pipeline**: End-to-end document ingestion not verified with actual content files
+3. **Batch Management**: Status and listing commands exist but not tested with real ingestion data
 
 ### ❌ **Known Missing**
 
-1. **Git Repository**: Project not yet in version control
-2. **Production Deployment**: No deployment configuration
+1. **Production Deployment**: No deployment configuration
+2. **Document Content**: Archive needs text files for meaningful knowledge responses
 3. **Comprehensive Testing**: Many components lack thorough testing
-4. **Error Handling**: Edge cases and error scenarios not fully tested
 
 ## Troubleshooting
 
@@ -516,11 +591,22 @@ After successful setup, you can:
 ## Useful Commands Reference
 
 ```bash
+# Complete Application Startup
+uvicorn backend.api:app --reload         # Terminal 1: Start backend API
+cd frontend && npm run dev                # Terminal 2: Start frontend
+
 # Docker management
 docker-compose -f docker-compose.dev.yml up -d postgres    # Start PostgreSQL
 docker-compose -f docker-compose.dev.yml down              # Stop services
 docker-compose -f docker-compose.dev.yml ps                # Check status
 docker-compose -f docker-compose.dev.yml logs postgres     # View logs
+
+# Frontend development
+cd frontend                               # Navigate to frontend
+npm install                               # Install dependencies
+npm run dev                              # Start development server (port 3000)
+npm run build                            # Build for production
+npm run preview                          # Preview production build
 
 # Python environment
 uv sync                                    # Install/update dependencies
@@ -530,9 +616,11 @@ uv run python --version                  # Check Python version
 # CLI commands (experimental)
 uv run rag-ingest --help                 # Main help
 uv run rag-ingest init-db                # Initialize database
-uv run rag-ingest ingest file.csv        # Ingest documents
 uv run rag-ingest list-batches           # List batches
 uv run rag-ingest status                 # Check status
+
+# Standalone ingestion (recommended)
+uv run python ingest.py file.csv --no-chunking --batch-name demo  # Ingest documents
 
 # Database access
 docker exec rag_unito-postgres-1 psql -U postgres -d rag_unito    # Connect to database
@@ -541,11 +629,15 @@ docker exec rag_unito-postgres-1 psql -U postgres -d rag_unito    # Connect to d
 uv run python test_ingestion.py          # Test CSV parsing (works)
 uv run pytest                            # Run unit tests (experimental)
 
-# API Server (NEW)
-uvicorn backend.api:app --reload         # Start the Conversation API
+# API testing (direct)
 curl http://127.0.0.1:8000/healthz       # Test health endpoint
 curl http://127.0.0.1:8000/metrics       # Test metrics endpoint
 curl -X POST http://127.0.0.1:8000/chat -H 'Content-Type: application/json' -d '{"prompt":"test","history":[]}' # Test chat
+
+# Application URLs
+# Frontend: http://localhost:3000         # Main chat interface
+# Backend API: http://127.0.0.1:8000     # API endpoints
+# API Docs: http://127.0.0.1:8000/docs   # Interactive documentation
 ```
 
 This guide reflects the **actual current state** of the implementation as of the most recent testing. 

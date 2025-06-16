@@ -1,86 +1,111 @@
 # RAG Unito
 
-A lightweight, production-ready conversational application that combines Large-Language-Model (LLM) reasoning with reliable Retrieval-Augmented Generation (RAG) over a curated bibliographic corpus.
+A research application for evaluating Large Language Model and Retrieval-Augmented Generation (RAG) technologies in library science. Provides conversational access to bibliographic archives to study how AI can enhance user experience with scholarly collections.
+
+### Vision
+
+Libraries and archives hold vast, inter-connected texts that are hard to browse or synthesize. By fusing structured metadata, full-text search, and a Retrieval-Augmented Language Model, this project lets users ask **"higher-order" questions** ("How did the subject's thinking evolve over time?") and receive grounded answers that cite the primary sources.
+
+The codebase is a **research testbed (June 2025)** for evaluating whether such conversational access can:
+• Increase discovery of under-used items  
+• Enable narrative storytelling across disparate documents  
+• Lower the barrier for non-experts to engage with scholarly collections
+
+**Research Questions**  
+1. Does conversational retrieval improve recall/precision vs. traditional OPAC search?  
+2. Can grounded LLM answers help users build mental models of a collection faster?  
+3. What UI cues prevent hallucinations and maintain trust?
+
+**Current Dataset**: Emanuele Artom bibliographic archive (sample collection for testing and evaluation)
 
 ## Features
 
-- **Document Ingestion**: Excel-based metadata with text file processing
-- **Flexible Chunking**: Configurable text chunking or full-document embedding
-- **Vector Search**: PostgreSQL with pgvector for efficient similarity search
-- **ReAct Agent**: Intelligent retrieval decisions using OpenAI function calling
-- **Bibliographic Rigor**: Proper metadata handling for academic/archival sources
-- **Production Ready**: Async FastAPI, structured logging, comprehensive testing
+- **Complete Web Interface**: Modern React + TypeScript chat application
+- **Conversation Intelligence**: Automatic detection of chitchat vs knowledge queries
+- **Citation System**: Inline citations with detailed source metadata
+- **Document Classification**: Support for authored works, library items, biographical materials, and traces
+- **Vector Search**: PostgreSQL with pgvector for semantic similarity search
+- **ReAct Agent**: Intelligent reasoning using OpenAI function calling
+- **Academic Rigor**: Proper bibliographic metadata handling and source attribution
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python ≥ 3.12
-- PostgreSQL ≥ 16 with pgvector extension
+- Node.js ≥ 18
+- Docker (for PostgreSQL + pgvector)
 - OpenAI API key
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd rag-unito
+git clone https://github.com/vlorenzo/biblio-rag.git
+cd biblio-rag
 ```
 
-2. Install dependencies:
+2. Install Python dependencies with uv:
 ```bash
-pip install -e ".[dev]"
+# Install uv if not present
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies
+uv sync
 ```
 
-3. Set up environment variables:
+3. Start PostgreSQL with Docker:
+```bash
+docker-compose -f docker-compose.dev.yml up -d postgres
+```
+
+4. Set up environment variables:
 ```bash
 cp env.example .env
-# Edit .env with your configuration
+# Edit .env with your OpenAI API key
 ```
 
-4. Initialize the database:
+5. Initialize the database:
 ```bash
-# Start PostgreSQL and create database
-createdb rag_unito
-
-# Run migrations
-alembic upgrade head
+uv run rag-ingest init-db
 ```
 
 ### Usage
 
-#### Document Ingestion
+#### Running the Application
 
+1. **Start the backend API** (in one terminal):
 ```bash
-# Ingest documents with chunking
-rag-ingest ingest metadata.xlsx --chunk-size 500 --chunk-overlap 50
-
-# Ingest full documents without chunking
-rag-ingest ingest metadata.xlsx --no-chunking
-
-# Check batch status
-rag-ingest status --batch-id <batch-id>
-```
-
-#### API Server
-
-```bash
-# Start the API server
 uvicorn backend.api:app --reload
 ```
 
-#### Frontend Chat UI
-
+2. **Start the frontend** (in another terminal):
 ```bash
-# Navigate to frontend directory and install dependencies
 cd frontend
-npm install
-
-# Start the development server
+npm install  # first time only
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:3000` and will connect to the backend API at `http://127.0.0.1:8000`.
+3. **Open your browser** to `http://localhost:3000`
+
+#### Using the Chat Interface
+
+- **Greetings**: Try "Hello" or "Ciao" for friendly responses
+- **Questions**: Ask "Who was Emanuele Artom?" (currently returns "no information found" until documents are ingested)
+- **Sources**: Click the menu (☰) to view citations sidebar
+- **Modes**: The header shows conversation mode (Conversational/Knowledge)
+
+#### Document Ingestion (Optional)
+
+```bash
+# Ingest CSV metadata
+uv run python ingest.py source_data/inventario_Artom_Prandi.csv --batch-name demo
+
+# Check status
+uv run rag-ingest list-batches
+```
+
+**Note**: The system works without ingested documents but provides more meaningful responses with actual content.
 
 ## Project Structure
 
@@ -114,61 +139,101 @@ The frontend will be available at `http://localhost:3000` and will connect to th
 ### Setup Development Environment
 
 ```bash
-# Install with development dependencies
-pip install -e ".[dev]"
+# Install Python dependencies
+uv sync
 
-# Install pre-commit hooks
-pre-commit install
+# Install frontend dependencies
+cd frontend && npm install
 
-# Run tests
-pytest
-
-# Run linting
-black .
-ruff check .
-mypy .
+# Start development services
+docker-compose -f docker-compose.dev.yml up -d postgres
 ```
 
-### Database Migrations
+### Development Workflow
 
 ```bash
-# Create new migration
-alembic revision --autogenerate -m "Description"
+# Backend development
+uvicorn backend.api:app --reload
+
+# Frontend development (in another terminal)
+cd frontend && npm run dev
+
+# Run basic tests
+uv run python test_ingestion.py
+```
+
+### Database Management
+
+**For Users - Quick Setup:**
+```bash
+# Initialize database with current schema
+uv run rag-ingest init-db
+```
+
+**For Developers - Schema Changes:**
+```bash
+# Create new migration after modifying models
+alembic revision --autogenerate -m "Description of changes"
 
 # Apply migrations
 alembic upgrade head
 
-# Rollback migration
+# Rollback migration if needed
 alembic downgrade -1
+
+# Database access
+docker exec -it rag_unito-postgres-1 psql -U postgres -d rag_unito
 ```
 
 ## Configuration
 
-Key environment variables:
+Key environment variables (create `.env` file from `env.example`):
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection URL | `postgresql+asyncpg://postgres:postgres@localhost:5432/rag_unito` |
-| `OPENAI_API_KEY` | OpenAI API key | Required |
+| `OPENAI_API_KEY` | OpenAI API key | **Required** |
+| `DATABASE_URL` | PostgreSQL connection URL | `postgresql+asyncpg://postgres:postgres@localhost:5433/rag_unito` |
 | `OPENAI_EMBEDDING_MODEL` | Embedding model | `text-embedding-3-small` |
 | `OPENAI_CHAT_MODEL` | Chat model | `gpt-4o-mini` |
-| `API_SECRET_KEY` | JWT secret key | Required |
 
-See `env.example` for complete configuration options.
+The application uses sensible defaults for most settings. See `env.example` for complete configuration options.
 
 ## Document Classes
 
-The system supports four types of bibliographic documents:
+The system supports configurable document classification. Current example types (from Emanuele Artom dataset):
 
 - **authored_by_subject**: Works written by the subject
-- **subject_library**: Books the subject read during their life
+- **subject_library**: Books from the subject's personal library
 - **about_subject**: Works written about the subject by others
 - **subject_traces**: Fragments and traces left by the subject
 
-## License
+*Note: Document classes are configurable and can be adapted for different archives and collections.*
 
-[Add your license here]
+## Current Status
 
-## Contributing
+**✅ What Works:**
+- Complete web chat interface with modern UI
+- Conversation intelligence (chitchat vs knowledge modes)
+- Backend API with vector search capabilities
+- OpenAI integration for embeddings and responses
+- PostgreSQL + pgvector database setup
+- CSV metadata parsing and ingestion pipeline
 
-[Add contributing guidelines here] 
+**⚠️ Current Limitations:**
+- Archive needs actual document content for meaningful knowledge responses
+- Without ingested documents, knowledge questions return "no information found"
+- Production deployment configuration not yet set up
+
+**🎯 Try It:**
+The application demonstrates the full conversational interface and intelligent mode detection even without document content. Once documents with text are ingested, it will provide cited, scholarly responses.
+
+**📚 Research Purpose:**
+This system serves as a testbed for evaluating how conversational AI can improve access to library and archival collections, with applications in digital humanities, library science, and information retrieval research.
+
+## Architecture
+
+- **Frontend**: React + TypeScript with Tailwind CSS
+- **Backend**: FastAPI with async support
+- **Database**: PostgreSQL 16 with pgvector for vector similarity search
+- **AI**: OpenAI APIs for embeddings and chat completions
+- **Agent**: ReAct pattern for intelligent reasoning and tool use

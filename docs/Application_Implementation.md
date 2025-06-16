@@ -77,41 +77,53 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
   - `tests/conftest.py` - Test configuration
 - ✅ **Test script**: `test_ingestion.py` - Manual testing of CSV parsing and chunking
 
-## ❌ **NOT Implemented (Despite Documentation)**
+## ✅ **NEWLY Implemented Components**
 
-### **Missing Core Components**
-- ❌ **No Git Repository**: Code exists only locally, never pushed to any repo
-- ❌ **No Database Migrations**: Alembic configured but no actual migration files
-- ✅ **Database Initialization**: `init-db` runs Alembic upgrade and succeeds
-- ❌ **No End-to-End Testing**: ingestion → retrieval → chat still untested with live DB & OpenAI
-- ✅ **FastAPI Endpoints**: Web API implemented with `/healthz`, `/metrics`, and `/chat` endpoints
-- ❌ **No Frontend**: No web interface
+### **Complete Frontend Application (June 2025)**
+- ✅ **React + TypeScript Frontend**: Full chat interface with modern component architecture
+- ✅ **Production Build System**: Vite with optimized builds (322KB gzipped)
+- ✅ **Responsive Design**: Tailwind CSS with academic color palette and mobile-first layout
+- ✅ **API Integration**: Complete HTTP client with CORS support and error handling
+- ✅ **Citation System**: Inline citations with detailed sources sidebar
+- ✅ **Conversation Modes**: Visual indicators and intelligent mode detection
 
-### **Untested Functionality**
-- ❌ **OpenAI Integration**: Embedding service and ReAct agent call rely on API key; only stubbed in tests
+## ❌ **Still Missing Components**
+
+### **Remaining Development Tasks**
+- ❌ **Document Content**: Archive needs actual text files to provide meaningful responses with citations
+- ❌ **Production Deployment**: Deployment configuration and hosting setup
+
+### **Verified Working Functionality**
+- ✅ **OpenAI Integration**: Embedding service and ReAct agent successfully call OpenAI APIs for query embedding and response generation
+- ✅ **Intelligent Responses**: System generates contextually appropriate answers and correctly detects conversation modes
 - ✅ **Metadata Ingestion**: Ingest script loads CSV metadata; chunk/embedding path pending text files
 
 ## 🔧 **What Actually Works (Verified)**
 
-### **New Conversation Modes (June 2025)**
-The system now supports intelligent conversation management:
+### **Complete Chat Application (June 2025)**
+The system now provides a full end-to-end conversational experience:
 
-**Chitchat Mode:**
-- Handles greetings, thanks, farewells politely
-- Responses are brief and redirect to the collection scope
-- No citations required or allowed
-- Example: "Hi!" → "Hi! How can I help you with the Emanuele Artom collection?"
+**Frontend Interface:**
+- ✅ **Modern Web UI**: React chat interface at `http://localhost:3000`
+- ✅ **Real-time Messaging**: Instant message sending with typing indicators
+- ✅ **Citation Display**: Inline numbered citations with expandable sources sidebar
+- ✅ **Error Handling**: Graceful error display with dismissible notifications
+- ✅ **Responsive Design**: Works on desktop, tablet, and mobile devices
+- ✅ **Academic Styling**: Professional design appropriate for scholarly use
 
-**Knowledge Mode:**
-- Handles factual questions about the bibliographic corpus
-- Requires citations for all factual claims
-- Falls back to safe refusal if no sources available
-- Example: "Who was Artom?" → Answer with [1] citations or refusal
+**Conversation Intelligence:**
+- ✅ **Chitchat Mode**: Handles greetings, thanks, farewells politely
+- ✅ **Knowledge Mode**: Provides detailed responses with citation requirements
+- ✅ **Improved UX Messages**: "I couldn't find any information about that in the Emanuele Artom archive yet." instead of confusing refusals
+- ✅ **Mode Detection**: Visual indicators show current conversation type
 
-**Guardrails:**
-- Chitchat responses cannot contain citations or be too long
-- Knowledge responses must have valid citations
-- Out-of-scope questions get polite refusal
+**Technical Integration:**
+- ✅ **API Communication**: Frontend successfully calls backend `/chat` endpoint
+- ✅ **CORS Support**: Cross-origin requests work properly
+- ✅ **Schema Compatibility**: Frontend and backend data formats align correctly
+- ✅ **Error Recovery**: Failed requests don't break the interface
+- ✅ **OpenAI APIs**: Query embedding and LLM response generation working correctly
+- ✅ **Vector Search**: Database similarity search functioning properly
 
 ### **Standalone Components**
 These components should work independently:
@@ -306,18 +318,17 @@ print(f"Database URL: {settings.database_url}")
 ## 🎯 **Realistic Current Capabilities**
 
 **What you can do right now:**
-- Parse CSV files and extract metadata
-- Chunk text content with different strategies
-- Run vector similarity search via Retrieval Service
-- Build prompts, enforce guardrails, run a ReAct reasoning loop in-memory (with stubbed LLM) and receive grounded answers
-- **Start a complete HTTP API** with health checks, metrics, and chat endpoints
-- **Test conversational interactions** via HTTP requests (returns safe refusal when no content is ingested)
+- ✅ **Use Complete Chat Interface**: Open `http://localhost:3000` and have conversations
+- ✅ **Test Full API Pipeline**: Frontend → Backend → RAG Engine → Database → Response
+- ✅ **Experience Conversation Modes**: Try greetings ("Hello") vs questions ("Who was Artom?")
+- ✅ **See Professional UX**: Modern interface with proper error handling and loading states
+- ✅ **Parse and Process Data**: CSV parsing, text chunking, vector similarity search
+- ✅ **Run Production API**: Complete HTTP API with health checks, metrics, and chat endpoints
 
 **What you cannot do yet:**
-- Actually ingest documents into a database (pending migrations/CLI init-db)
-- Generate embeddings (requires OpenAI API key and testing)
-- Have meaningful conversations (requires ingested document content with embeddings)
-- Deploy or run the application in production
+- ❌ **Get Knowledge Answers**: Archive needs actual document content with embeddings
+- ❌ **See Real Citations**: Requires ingested documents to provide source references  
+- ❌ **Deploy to Production**: No deployment configuration yet
 
 This document reflects the honest current state of the project as of the last implementation session. 
 

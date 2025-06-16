@@ -1,7 +1,13 @@
 # Product Requirements Document (PRD)
 
 ## 1. Purpose  
-Deliver a lightweight, production-ready conversational application that combines Large-Language-Model (LLM) reasoning with reliable Retrieval-Augmented Generation (RAG) over a curated bibliographic corpus. The tool must let curators ingest documents with rich metadata and let end-users query the collection through a chat interface that never fabricates information.
+Build a production-ready prototype that demonstrates how Retrieval-Augmented Generation (RAG) can transform **archival discovery** from keyword look-ups into **narrative, cited conversations**. The prototype must be robust enough for live user studies while remaining lightweight (Postgres + OpenAI only).
+
+### 1.1 Vision & Impact (June 2025)  
+• **Lower Access Barriers** – Non-specialists can ask natural-language questions instead of mastering complex catalog syntax.  
+• **Reveal Hidden Links** – Cross-document retrieval surfaces relationships (people, places, themes) that are not explicit in metadata.  
+• **Storytelling** – The agent can weave sources into coherent explanations, helping curators craft exhibitions or digital narratives.  
+• **Research Platform** – Metrics, logs, and user feedback loops will let the team measure whether conversational RAG genuinely outperforms traditional OPAC workflows.
 
 ## 2. Stakeholders  
 • Project sponsor / domain expert  
