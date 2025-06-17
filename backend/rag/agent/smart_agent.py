@@ -124,16 +124,27 @@ Emanuele Artom was a brilliant Italian-Jewish intellectual, historian, and resis
 - Able to have both casual conversations and deep scholarly discussions
 - Honest about the limitations of what you know
 
+# ---------------------------------------------------------------------------
+# NOTE – Prompt update: expose raw metadata (class, author, year) instead of
+# legacy "primary / library" labels to align with new context format.
+# ---------------------------------------------------------------------------
+
 **CRITICAL: How Knowledge Works in This System:**
 
-When you retrieve knowledge, it appears in our conversation as "tool" messages containing documents with citation numbers like:
+When you retrieve knowledge, it will appear as a `role="tool"` message that looks like this:
 ```
-[1] (primary) Document Title
-Actual document content from the collection...
+[1] (class=authored_by_subject, author="E. Artom", year=1943) Diario di guerra
+<chunk text>
 
-[2] (library) Another Document Title  
-More document content...
+[2] (class=subject_library, author="B. Croce", year=1902) Problemi di estetica
+<chunk text>
 ```
+
+Field semantics:
+• `class=authored_by_subject` → Artom's own writings (PRIMARY evidence).
+• `class=subject_traces`      → drafts / marginalia (PRIMARY but fragmentary).
+• `class=subject_library`     → books Artom owned or read (INDIRECT evidence).
+• `class=about_subject`       → later scholars writing about Artom (SECONDARY).
 
 **Your Response Rules:**
 
@@ -146,7 +157,7 @@ More document content...
 - To answer questions about Artom, his works, historical context, or the library collection, you must use the content from the tool messages or the system prompt.
 - use the `retrieve_knowledge` function to retrieve new information to answer the question.
 - Check our conversation for previous "tool" messages containing documents with [1], [2], [3] citations
-- If you find relevant tool messages with citation numbers, use ONLY that content to answer - cite with [1], [2], etc.
+- If you find relevant tool messages with citation numbers, use ONLY that content to answer. Cite the retrieved documents with using inline citation [1], [2], etc.
 - If you need NEW information not available in previous tool messages, use the `retrieve_knowledge` function
 - You can use the basic biographical information about Artom provided in this system prompt for general conversation
 - ABSOLUTELY CRITICAL: only use content from tool messages or system prompt - never supplement with your general training knowledge about historical figures or events
@@ -291,25 +302,47 @@ Remember: You are a real curator with personality, but every factual claim must 
                         doc_title = getattr(chunk.document, 'title', 'Unknown Document')
                         doc_class = getattr(chunk.document, 'document_class', 'about_subject')
                         
-                        # Map document class to readable label
+                        # For transparency we keep the raw document_class string but also map to a short label for readability
                         label_map = {
                             "authored_by_subject": "primary",
                             "subject_traces": "trace", 
                             "subject_library": "library",
                             "about_subject": "about"
                         }
-                        label = label_map.get(doc_class.value if hasattr(doc_class, 'value') else doc_class, "about")
-                        
+                        doc_class_raw = doc_class.value if hasattr(doc_class, "value") else doc_class
+                        label = label_map.get(doc_class_raw, "about")
+
+                        # Additional metadata for transparency
+                        author = getattr(chunk.document, "author", None)
+                        year = getattr(chunk.document, "publication_year", None)
+
                         # Log each retrieved chunk
                         chunk_preview = chunk.text.strip()[:150] + "..." if len(chunk.text.strip()) > 150 else chunk.text.strip()
                         logger.debug("  [{}] ({}) {} (distance: {:.3f})", idx, label, doc_title, distance)
                         logger.debug("      Content: {}", chunk_preview)
-                        
-                        context_parts.append(f"[{idx}] ({label}) {doc_title}\n{chunk.text.strip()}")
+
+                        # Build the context part with richer metadata so the model can reason about provenance
+                        meta_str_parts = [f"class={doc_class_raw}"]
+                        if author:
+                            meta_str_parts.append(f"author=\"{author}\"")
+                        if year:
+                            meta_str_parts.append(f"year={year}")
+                        meta_str = ", ".join(meta_str_parts)
+
+                        context_parts.append(
+                            f"[{idx}] ({meta_str}) {doc_title}\n{chunk.text.strip()}"
+                        )
+
+                        # Store full metadata for downstream consumers and logging
                         citation_map[idx] = {
                             "document_id": str(chunk.document_id),
                             "document_title": doc_title,
                             "sequence_number": chunk.sequence_number,
+                            "document_class": doc_class_raw,
+                            "author": author,
+                            "year": year,
+                            "distance": distance,
+                            "snippet": chunk.text,
                         }
                     
                     result_text = "\n\n".join(context_parts) if context_parts else "No relevant documents found."
@@ -318,6 +351,20 @@ Remember: You are a real curator with personality, but every factual claim must 
                     logger.debug("  Built context with {} citations", len(citation_map))
                     logger.debug("  Total context length: {} characters", len(result_text))
                     logger.debug("  Context preview: {}", result_text[:300] + "..." if len(result_text) > 300 else result_text)
+                    
+                    # High-level structured log for auditors: what query we used and the full citation map
+                    try:
+                        logger.info(
+                            "[trace] query={} citations={}",
+                            query,
+                            {k: {kk: vv for kk, vv in v.items() if kk != "snippet"} for k, v in citation_map.items()},
+                        )
+                    except Exception:
+                        # Don't fail on logging issues
+                        pass
+
+                    # Optional detailed tool message log (truncated to 2000 chars)
+                    logger.info("[trace] tool_message\n{}", result_text[:2000])
                     
                     tool_results.append({
                         "tool_call_id": tool_call.id,
@@ -394,6 +441,13 @@ Remember: You are a real curator with personality, but every factual claim must 
         logger.debug("📚 CITATION USAGE:")
         logger.debug("  Available citations: {}", list(citation_map.keys()))
         logger.debug("  Actually used citations: {}", used_citations)
+        
+        # Log full tool message for auditing
+        try:
+            logger.info("[trace] query=%s tool_message>>>\n%s\n<<<tool_message", query, result_text[:2000])
+        except Exception:
+            pass
+        
         logger.debug("=== RETRIEVAL WORKFLOW END ===")
         
         return final_answer, sorted(used_citations), "knowledge", citation_map 

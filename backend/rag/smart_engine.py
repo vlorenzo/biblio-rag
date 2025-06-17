@@ -59,8 +59,15 @@ async def chat(
                 # Add other fields as needed
             })
     
+    # Combine transparency data into meta
+    meta = {
+        "mode": answer_type,
+        "citation_map": citation_map,
+        "used_citations": used_citations,
+    }
+
     return ChatResponse(
         answer=answer,
         citations=citations,
-        meta={"mode": answer_type}
+        meta=meta,
     ) 
