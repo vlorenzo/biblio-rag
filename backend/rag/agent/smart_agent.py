@@ -57,13 +57,13 @@ class SmartAgent:
                     "type": "function",
                     "function": {
                         "name": "retrieve_knowledge",
-                        "description": "Search the Emanuele Artom collection for relevant documents and information",
+                        "description": "Search the Emanuele Artom library collection for relevant documents and information",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "query": {
                                     "type": "string",
-                                    "description": "The search query to find relevant documents"
+                                    "description": "The search query to find relevant documents. keep the user sentence and expand when you think will improve recall, (the tool will use vector search to find relevant documents)"
                                 },
                                 "reasoning": {
                                     "type": "string", 
