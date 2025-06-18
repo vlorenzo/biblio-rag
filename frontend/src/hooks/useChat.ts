@@ -57,9 +57,28 @@ export function useChat() {
         timestamp: new Date(),
       };
 
-      // Update citations map
+      // Update citations map with full evidence
       const newCitations = new Map(state.citations);
-      response.citations.forEach(citation => {
+
+      // 1. Add all chunks from citation_map (full evidence)
+      if (response.meta?.citation_map) {
+        Object.entries(response.meta.citation_map).forEach(([key, value]) => {
+          const citationId = `cite_${key}`;
+          newCitations.set(citationId, {
+            id: citationId,
+            title: value.document_title ?? 'Untitled',
+            author: value.author ?? undefined,
+            excerpt: value.snippet?.slice(0, 200) ?? '',
+            publication_year: value.year ?? undefined,
+            document_class: value.document_class ?? undefined,
+            snippet: value.snippet,
+            distance: value.distance,
+          });
+        });
+      }
+
+      // 2. Preserve legacy citations array (those explicitly referenced)
+      (response.citations ?? []).forEach(citation => {
         newCitations.set(citation.id, citation);
       });
 

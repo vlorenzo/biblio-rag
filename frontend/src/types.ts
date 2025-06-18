@@ -14,6 +14,8 @@ export interface Citation {
   source_type?: string;
   publication_year?: number;
   document_class?: string;
+  snippet?: string;
+  distance?: number;
 }
 
 // Backend API types
@@ -32,6 +34,8 @@ export interface ChatResponse {
   };
   meta?: {
     mode?: 'chitchat' | 'knowledge';
+    citation_map?: { [key: string]: any };
+    used_citations?: number[];
     token_usage?: {
       prompt_tokens: number;
       completion_tokens: number;

@@ -45,16 +45,19 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 - ✅ **Prompt Builder** (`backend/rag/prompt/builder.py`) – builds inline-tagged context with citation map + conversation mode instructions.
 - ✅ **Guardrails** (`backend/rag/guardrails/*`) – token limit + citation validation + chitchat constraints + safe refusal.
 - ✅ **ReAct Agent** (`backend/rag/agent/react_agent.py`) – lightweight ReAct loop with conversation mode detection (chitchat vs knowledge).
-- ✅ **Chat Orchestrator** (`backend/rag/engine.py`) – ties together retrieval, prompt builder, agent and guardrails with mode-aware citation handling.
+- ✅ **Chat Orchestrator** (`backend/rag/smart_engine.py`) – ties together retrieval, prompt builder, agent and guardrails.
 - ✅ **Conversation Modes** – Agent can distinguish between chitchat (greetings, brief social) and knowledge queries (factual questions requiring citations).
 - ✅ **Enhanced Tests** (`tests/test_react_agent.py`) – covers both conversation modes.
+- ✅ **Evidence Transparency** – The system now surfaces the complete set of retrieved documents (`citation_map`) in the API response and logs, ensuring full auditability of the knowledge the model consulted.
+- ✅ **Metadata-Aware Prompting** – The context sent to the LLM now includes inline metadata (document class, author, year), and the system prompt has been updated to teach the model how to interpret this information.
+- ✅ **Populated Corpus** - The Emanuele Artom sample collection has been ingested, enabling live, knowledge-based conversational queries.
 
 ### **5. Conversation API (NEW)**
 - ✅ **FastAPI Application** (`backend/api/__init__.py`) – main app with lifespan management for database cleanup
 - ✅ **API Routes** (`backend/api/routes.py`) – three endpoints with proper error handling:
   - `GET /healthz` – health check endpoint
   - `GET /metrics` – Prometheus metrics with optional bearer token protection  
-  - `POST /chat` – main conversational endpoint using RAG engine
+  - `POST /chat` – main conversational endpoint that returns the answer, `citation_map` (all consulted sources), and `used_citations` (sources explicitly referenced in the answer).
 - ✅ **Prometheus Integration** – request counting and standard Python metrics
 - ✅ **Configuration** – added `metrics_token` setting for optional endpoint protection
 - ✅ **Dependencies** – added `prometheus-client>=0.19.0` to `pyproject.toml`
@@ -90,7 +93,6 @@ RAG Unito is a **work-in-progress** conversational application for bibliographic
 ## ❌ **Still Missing Components**
 
 ### **Remaining Development Tasks**
-- ❌ **Document Content**: Archive needs actual text files to provide meaningful responses with citations
 - ❌ **Production Deployment**: Deployment configuration and hosting setup
 
 ### **Verified Working Functionality**
@@ -119,11 +121,13 @@ The system now provides a full end-to-end conversational experience:
 
 **Technical Integration:**
 - ✅ **API Communication**: Frontend successfully calls backend `/chat` endpoint
+- ✅ **Full Transparency**: API response includes the full `citation_map` of all consulted sources, which are displayed in the UI.
 - ✅ **CORS Support**: Cross-origin requests work properly
 - ✅ **Schema Compatibility**: Frontend and backend data formats align correctly
 - ✅ **Error Recovery**: Failed requests don't break the interface
 - ✅ **OpenAI APIs**: Query embedding and LLM response generation working correctly
 - ✅ **Vector Search**: Database similarity search functioning properly
+- ✅ **Auditable Logging**: Structured `[trace]` logs record the exact query and metadata sent to the model for every retrieval action.
 
 ### **Standalone Components**
 These components should work independently:
@@ -324,10 +328,10 @@ print(f"Database URL: {settings.database_url}")
 - ✅ **See Professional UX**: Modern interface with proper error handling and loading states
 - ✅ **Parse and Process Data**: CSV parsing, text chunking, vector similarity search
 - ✅ **Run Production API**: Complete HTTP API with health checks, metrics, and chat endpoints
+- ✅ **Get Knowledge Answers**: Ask questions about the Emanuele Artom archive and receive grounded, cited answers.
+- ✅ **Verify Sources**: See the exact source documents the agent consulted for each answer in the sidebar.
 
-**What you cannot do yet:**
-- ❌ **Get Knowledge Answers**: Archive needs actual document content with embeddings
-- ❌ **See Real Citations**: Requires ingested documents to provide source references  
+**What is still pending:**
 - ❌ **Deploy to Production**: No deployment configuration yet
 
 This document reflects the honest current state of the project as of the last implementation session. 

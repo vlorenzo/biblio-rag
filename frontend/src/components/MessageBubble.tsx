@@ -1,3 +1,4 @@
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -15,41 +16,47 @@ export default function MessageBubble({ message, onCitationClick }: MessageBubbl
 
   // Custom component for rendering citations
   const CitationRenderer = ({ children }: { children: React.ReactNode }) => {
-    const text = children?.toString() || '';
-    const citationRegex = /\[(\d+)\]/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = citationRegex.exec(text)) !== null) {
-      // Add text before citation
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
+    // Helper to process children recursively
+    const process = (node: React.ReactNode): React.ReactNode => {
+      if (typeof node === 'string') {
+        // Only process citation markers in plain text
+        const citationRegex = /\[(\d+)\]/g;
+        const parts = [];
+        let lastIndex = 0;
+        let match;
+        while ((match = citationRegex.exec(node)) !== null) {
+          if (match.index > lastIndex) {
+            parts.push(node.slice(lastIndex, match.index));
+          }
+          const citationNum = match[1];
+          parts.push(
+            <sup key={`citation-${citationNum}-${match.index}`}>
+              <button
+                className="citation-link"
+                onClick={onCitationClick}
+                type="button"
+              >
+                {citationNum}
+              </button>
+            </sup>
+          );
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < node.length) {
+          parts.push(node.slice(lastIndex));
+        }
+        return parts;
+      } else if (Array.isArray(node)) {
+        return node.map((child, idx) => <React.Fragment key={idx}>{process(child)}</React.Fragment>);
+      } else if (React.isValidElement(node)) {
+        // Recursively process children of React elements
+        return React.cloneElement(node, node.props, process(node.props.children));
+      } else {
+        // For null, undefined, boolean, etc.
+        return node;
       }
-      
-      // Add citation link
-      const citationNum = match[1];
-      parts.push(
-        <sup key={`citation-${citationNum}-${match.index}`}>
-          <button
-            className="citation-link"
-            onClick={onCitationClick}
-            type="button"
-          >
-            {citationNum}
-          </button>
-        </sup>
-      );
-      
-      lastIndex = match.index + match[0].length;
-    }
-    
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
-    }
-    
-    return <>{parts}</>;
+    };
+    return <>{process(children)}</>;
   };
 
   return (

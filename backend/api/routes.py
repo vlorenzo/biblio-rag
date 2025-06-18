@@ -9,7 +9,7 @@ from loguru import logger
 from backend.database import get_session
 from backend.config import settings
 from backend.rag.schemas import ChatRequest, ChatResponse
-from backend.rag import engine as rag_engine
+from backend.rag import smart_engine as rag_engine
 
 router = APIRouter()
 

@@ -12,7 +12,7 @@ async def test_chitchat():
     
     # Mock LLM response for greeting
     async def fake_llm_call(self, prompt: str):
-        return "Thought: This is a greeting\nAction: Answer\nFinal(type=chitchat): Hi! How can I help you with the Emanuele Artom collection?"
+        return "Thought: This is a greeting\nAction: Answer\nFinal(type=chitchat): Hello! It's wonderful to connect with you. How can I assist you today in exploring the fascinating world of Emanuele Artom and his remarkable legacy?"
     
     # Monkey patch the LLM call
     ReActAgent._llm_call = fake_llm_call
@@ -29,7 +29,7 @@ async def test_chitchat():
     print(f"Answer: {answer}")
     print(f"Citations: {citations}")
     print(f"Answer type: {answer_type}")
-    print(f"Expected: chitchat mode with no citations")
+    print(f"Expected: chitchat mode with no citations and engaging personality")
     print("✅ Chitchat test passed!\n")
 
 
