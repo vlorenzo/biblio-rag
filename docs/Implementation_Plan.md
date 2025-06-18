@@ -82,6 +82,13 @@
 - **Single Pipeline**: No regex routing; agent autonomously decides conversation mode
 - **Backward Compatibility**: Existing functionality unchanged; new mode detection gracefully falls back to knowledge mode
 
+### Phase 4.2 – Evidence Transparency Layer (June 2025) ✅ **COMPLETED**
+1. ✅ **Enhanced `citation_map`**: The internal citation map was enriched to include the full text snippet, document class, author, year, and retrieval distance for every retrieved chunk.
+2. ✅ **Transparent API Response**: The `/chat` endpoint's `meta` object now returns the full `citation_map` (all consulted evidence) and `used_citations` (the subset the model explicitly referenced with brackets).
+3. ✅ **Richer Model Context**: The tool message sent to the LLM now includes inline metadata tags (`class`, `author`, `year`) for each chunk, enabling the model to reason about source provenance.
+4. ✅ **Upgraded System Prompt**: The agent's system prompt was updated to teach it how to interpret the new metadata tags and the semantics of each `document_class`.
+5. ✅ **Auditable Logging**: Added structured `[trace]` logs that record the retrieval query and the exact tool message payload sent to the model, ensuring full auditability.
+
 ### Phase 5 – Frontend Chat UI (1 day) ✅ **COMPLETED**
 1. ✅ **Complete React + TypeScript Frontend** with Vite build system
 2. ✅ **Modern Component Architecture**: ChatHeader, MessagesPane, MessageBubble, ChatInputBar, SourcesSidebar, ErrorBanner

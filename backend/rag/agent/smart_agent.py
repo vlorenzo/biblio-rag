@@ -82,7 +82,7 @@ class SmartAgent:
             # Handle tool calls if any
             if response.choices[0].message.tool_calls:
                 logger.debug("🔄 LLM DECISION: Knowledge needed - proceeding with retrieval")
-                return await self._handle_tool_calls(session, messages, response, tools)
+                return await self._handle_tool_calls(session, messages, response, tools, user_query)
             else:
                 # Direct response - classify as chitchat
                 logger.debug("💬 LLM DECISION: Direct conversation - no retrieval needed")
@@ -91,15 +91,13 @@ class SmartAgent:
                     logger.warning("LLM returned empty content for direct response")
                     content = "Mi dispiace, non sono riuscito a formulare una risposta adeguata. Potresti riprovare?"
                 
-                logger.debug("✅ CHITCHAT RESPONSE:")
-                logger.debug("  Raw response length: {} characters", len(content))
-                logger.debug("  Raw response preview: {}", content[:200] + "..." if len(content) > 200 else content)
+                logger.debug("✅ CHITCHAT RESPONSE (RAW):")
+                logger.debug("  Length: {} characters", len(content))
+                logger.debug("  Preview: {}", content[:400] + "..." if len(content) > 400 else content)
                 
                 final_answer = apply_guardrails(content, {}, None, answer_type="chitchat")
                 
-                logger.debug("🛡️ AFTER CHITCHAT GUARDRAILS:")
-                logger.debug("  Final answer length: {} characters", len(final_answer))
-                logger.debug("  Final answer preview: {}", final_answer[:200] + "..." if len(final_answer) > 200 else final_answer)
+                logger.info("🛡️ CHITCHAT RESPONSE (FINAL): {}", final_answer)
                 
                 return final_answer, [], "chitchat", {}
                 
@@ -205,23 +203,36 @@ Remember: You are a real curator with personality, but every factual claim must 
             "tool_choice": "auto"
         }
         
+        # Use TRACE level for the full, verbose payload, which can be enabled in dev
+        logger.trace("Full OpenAI Request: {}", json.dumps(api_request, indent=2))
+        
+        # Use DEBUG for a more concise summary
         logger.debug("=== SMART AGENT API CALL ===")
-        logger.debug("Request: {}", json.dumps({
-            **api_request,
-            "messages": f"[{len(messages)} messages]"  # Summary for normal logs
-        }, indent=2))
+        logger.debug(
+            "Calling model='{}' with temperature={} and {} tools.",
+            api_request["model"], api_request["temperature"], len(api_request["tools"])
+        )
         
         # For debugging: log the actual messages content (but safely truncated)
-        logger.debug("Message details:")
+        logger.debug("Message details ({} total):", len(messages))
         for i, msg in enumerate(messages):
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
-            if content:
-                # Truncate very long content but show enough to debug
+            
+            # Nicer formatting for different message types
+            if role == "system":
                 content_preview = content[:200] + "..." if len(content) > 200 else content
-                logger.debug("  [{}/{}] {}: {}", i+1, len(messages), role, content_preview)
+                logger.debug("  [{}/{}] role={}: {}", i + 1, len(messages), role, content_preview)
+            elif "tool_calls" in msg and msg.get("tool_calls"):
+                logger.debug("  [{}/{}] role={}: [{} tool calls]", i + 1, len(messages), role, len(msg["tool_calls"]))
+            elif role == "tool":
+                content_preview = content[:400] + "..." if len(content) > 400 else content
+                logger.debug("  [{}/{}] role={}: [tool_id={}] {}", i + 1, len(messages), role, msg.get("tool_call_id", "N/A"), content_preview)
+            elif content:
+                content_preview = content[:400] + "..." if len(content) > 400 else content
+                logger.debug("  [{}/{}] role={}: {}", i + 1, len(messages), role, content_preview)
             else:
-                logger.debug("  [{}/{}] {}: [no content]", i+1, len(messages), role)
+                logger.debug("  [{}/{}] role={}: [no content]", i+1, len(messages), role)
         
         try:
             response = await self._client.chat.completions.create(**api_request)
@@ -232,25 +243,30 @@ Remember: You are a real curator with personality, but every factual claim must 
                 raise ValueError("Empty response from OpenAI API")
             
             # Log response details
-            response_content = response.choices[0].message.content
-            content_preview = ""
-            if response_content:
-                content_preview = response_content[:100] + "..." if len(response_content) > 100 else response_content
+            logger.debug("--- SMART AGENT API RESPONSE ---")
+            logger.trace("Full OpenAI Response: {}", response.model_dump_json(indent=2))
             
-            logger.debug("Response: {}", json.dumps({
+            response_message = response.choices[0].message
+            response_content = response_message.content or ""
+            
+            log_details = {
                 "model": response.model,
-                "tool_calls": len(response.choices[0].message.tool_calls) if response.choices[0].message.tool_calls else 0,
-                "content_length": len(response.choices[0].message.content) if response.choices[0].message.content else 0,
-                "content_preview": content_preview,
-                "finish_reason": response.choices[0].finish_reason
-            }, indent=2))
-            logger.debug("=== END SMART AGENT API CALL ===")
+                "finish_reason": response.choices[0].finish_reason,
+                "tool_calls": len(response_message.tool_calls) if response_message.tool_calls else 0,
+                "content_length": len(response_content),
+            }
+            
+            logger.debug("Response received: {}", json.dumps(log_details))
+            if log_details["content_length"] > 0:
+                logger.debug("Response preview: {}", response_content[:200] + "..." if len(response_content) > 200 else response_content)
+            
+            logger.debug("============================")
             
             return response
             
         except Exception as e:
             logger.error("Error in LLM API call: {}", e)
-            logger.debug("=== END SMART AGENT API CALL (ERROR) ===")
+            logger.debug("============================")
             raise
     
     async def _handle_tool_calls(
@@ -258,23 +274,21 @@ Remember: You are a real curator with personality, but every factual claim must 
         session: Session,
         messages: List[Dict[str, str]],
         response: Any,
-        tools: List[Dict]
+        tools: List[Dict],
+        user_query: str,
     ) -> Tuple[str, List[int], str, Dict[int, Dict]]:
         """Handle tool calls from the LLM."""
         
-        logger.debug("=== RETRIEVAL WORKFLOW START ===")
+        logger.info("=== RETRIEVAL WORKFLOW START for user_query: '{}' ===", user_query)
         logger.debug("Original conversation has {} messages", len(messages))
         
         # Add the assistant's message with tool calls
-        assistant_message = {
-            "role": "assistant",
-            "content": response.choices[0].message.content,
-            "tool_calls": []
-        }
+        assistant_message = response.choices[0].message.model_dump()
         
         # Process each tool call
         tool_results = []
         citation_map = {}
+        all_queries = []
         
         for tool_call in response.choices[0].message.tool_calls:
             if tool_call.function.name == "retrieve_knowledge":
@@ -282,10 +296,11 @@ Remember: You are a real curator with personality, but every factual claim must 
                     args = json.loads(tool_call.function.arguments)
                     query = args.get("query", "")
                     reasoning = args.get("reasoning", "")
+                    all_queries.append(query)
                     
                     logger.debug("🔍 TOOL CALL: retrieve_knowledge")
                     logger.debug("  Query: '{}'", query)
-                    logger.debug("  Reasoning: '{}'", reasoning)
+                    logger.debug("  LLM Reasoning: '{}'", reasoning)
                     
                     # Perform retrieval
                     logger.debug("📖 Searching knowledge base...")
@@ -293,8 +308,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                         session, query, k=5
                     )
                     
-                    logger.debug("📋 RETRIEVAL RESULTS:")
-                    logger.debug("  Found {} relevant chunks", len(hits))
+                    logger.debug("📋 RETRIEVAL RESULTS (found {} chunks):", len(hits))
                     
                     # Build context and citation map
                     context_parts = []
@@ -302,23 +316,18 @@ Remember: You are a real curator with personality, but every factual claim must 
                         doc_title = getattr(chunk.document, 'title', 'Unknown Document')
                         doc_class = getattr(chunk.document, 'document_class', 'about_subject')
                         
-                        # For transparency we keep the raw document_class string but also map to a short label for readability
-                        label_map = {
-                            "authored_by_subject": "primary",
-                            "subject_traces": "trace", 
-                            "subject_library": "library",
-                            "about_subject": "about"
-                        }
                         doc_class_raw = doc_class.value if hasattr(doc_class, "value") else doc_class
-                        label = label_map.get(doc_class_raw, "about")
 
                         # Additional metadata for transparency
                         author = getattr(chunk.document, "author", None)
                         year = getattr(chunk.document, "publication_year", None)
 
-                        # Log each retrieved chunk
-                        chunk_preview = chunk.text.strip()[:150] + "..." if len(chunk.text.strip()) > 150 else chunk.text.strip()
-                        logger.debug("  [{}] ({}) {} (distance: {:.3f})", idx, label, doc_title, distance)
+                        # Log each retrieved chunk with a longer preview
+                        chunk_preview = chunk.text.strip()[:300] + "..." if len(chunk.text.strip()) > 300 else chunk.text.strip()
+                        logger.debug(
+                            "  [{}] class='{}' title='{}' (distance: {:.3f})", 
+                            idx, doc_class_raw, doc_title, distance
+                        )
                         logger.debug("      Content: {}", chunk_preview)
 
                         # Build the context part with richer metadata so the model can reason about provenance
@@ -347,38 +356,28 @@ Remember: You are a real curator with personality, but every factual claim must 
                     
                     result_text = "\n\n".join(context_parts) if context_parts else "No relevant documents found."
                     
-                    logger.debug("🔄 CONTEXT INJECTION:")
-                    logger.debug("  Built context with {} citations", len(citation_map))
-                    logger.debug("  Total context length: {} characters", len(result_text))
-                    logger.debug("  Context preview: {}", result_text[:300] + "..." if len(result_text) > 300 else result_text)
-                    
-                    # High-level structured log for auditors: what query we used and the full citation map
-                    try:
-                        logger.info(
-                            "[trace] query={} citations={}",
-                            query,
-                            {k: {kk: vv for kk, vv in v.items() if kk != "snippet"} for k, v in citation_map.items()},
-                        )
-                    except Exception:
-                        # Don't fail on logging issues
-                        pass
+                    # Use a more structured log for this important trace event
+                    trace_log_data = {
+                        "query": query,
+                        "reasoning": reasoning,
+                        "results": len(hits),
+                        "citations": {
+                            k: {kk: vv for kk, vv in v.items() if kk != "snippet"} 
+                            for k, v in citation_map.items()
+                        }
+                    }
+                    logger.info(
+                        "[trace] event=retrieval data={}",
+                        json.dumps(trace_log_data)
+                    )
 
                     # Optional detailed tool message log (truncated to 2000 chars)
-                    logger.info("[trace] tool_message\n{}", result_text[:2000])
+                    logger.trace("[trace] tool_message_for_llm\n{}", result_text)
                     
                     tool_results.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "content": result_text
-                    })
-                    
-                    assistant_message["tool_calls"].append({
-                        "id": tool_call.id,
-                        "type": "function", 
-                        "function": {
-                            "name": tool_call.function.name,
-                            "arguments": tool_call.function.arguments
-                        }
                     })
                     
                 except Exception as e:
@@ -393,44 +392,28 @@ Remember: You are a real curator with personality, but every factual claim must 
         messages.append(assistant_message)
         messages.extend(tool_results)
         
-        logger.debug("💬 CONVERSATION ENRICHMENT:")
-        logger.debug("  Enriched conversation now has {} messages", len(messages))
-        logger.debug("  Added: 1 assistant message with tool calls + {} tool results", len(tool_results))
-        
-        # Log the enriched conversation structure
-        logger.debug("📝 ENRICHED CONVERSATION STRUCTURE:")
-        for i, msg in enumerate(messages[-3:], start=len(messages)-2):  # Show last few messages
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if role == "tool":
-                content_preview = content[:200] + "..." if len(content) > 200 else content
-                logger.debug("  [{}] {}: {}", i, role, content_preview)
-            elif "tool_calls" in msg:
-                logger.debug("  [{}] {}: [has {} tool calls]", i, role, len(msg.get("tool_calls", [])))
-            else:
-                content_preview = content[:100] + "..." if len(content) > 100 else content
-                logger.debug("  [{}] {}: {}", i, role, content_preview)
+        logger.debug("💬 CONVERSATION ENRICHED with {} tool results.", len(tool_results))
         
         # Make final call to get the answer
-        logger.debug("🤖 FINAL LLM CALL:")
-        logger.debug("  Calling LLM with enriched context to generate final answer...")
+        logger.debug("🤖 Calling LLM with enriched context to generate final answer...")
         final_response = await self._call_llm(messages, tools)
         final_content = final_response.choices[0].message.content
         
         # Ensure final_content is always a string for guardrails
         if final_content is None:
+            logger.warning("LLM returned null content for final answer. Using fallback.")
             final_content = "I apologize, but I wasn't able to generate a proper response."
         
-        logger.debug("✅ FINAL ANSWER GENERATED:")
-        logger.debug("  Raw answer length: {} characters", len(final_content))
-        logger.debug("  Raw answer preview: {}", final_content[:200] + "..." if len(final_content) > 200 else final_content)
+        logger.debug("✅ FINAL ANSWER (RAW):")
+        logger.debug("  Length: {} characters", len(final_content))
+        logger.debug("  Preview: {}", final_content[:500] + "..." if len(final_content) > 500 else final_content)
         
         # Apply guardrails for knowledge response
         final_answer = apply_guardrails(final_content, citation_map, messages, answer_type="knowledge")
         
-        logger.debug("🛡️ AFTER GUARDRAILS:")
-        logger.debug("  Final answer length: {} characters", len(final_answer))
-        logger.debug("  Final answer preview: {}", final_answer[:200] + "..." if len(final_answer) > 200 else final_answer)
+        logger.debug("🛡️ FINAL ANSWER (AFTER GUARDRAILS):")
+        logger.debug("  Length: {} characters", len(final_answer))
+        logger.debug("  Preview: {}", final_answer[:500] + "..." if len(final_answer) > 500 else final_answer)
         
         # Extract citation numbers that were actually used
         used_citations = []
@@ -438,16 +421,17 @@ Remember: You are a real curator with personality, but every factual claim must 
             if f"[{i}]" in final_answer:
                 used_citations.append(i)
         
-        logger.debug("📚 CITATION USAGE:")
-        logger.debug("  Available citations: {}", list(citation_map.keys()))
-        logger.debug("  Actually used citations: {}", used_citations)
+        logger.debug("📚 CITATION USAGE: Used {} of {} available citations. (Used: {})", len(used_citations), len(citation_map), used_citations)
         
-        # Log full tool message for auditing
-        try:
-            logger.info("[trace] query=%s tool_message>>>\n%s\n<<<tool_message", query, result_text[:2000])
-        except Exception:
-            pass
-        
-        logger.debug("=== RETRIEVAL WORKFLOW END ===")
+        # This is the final, most important trace log for the retrieval workflow
+        final_trace_data = {
+            "user_query": user_query,
+            "retrieval_queries": all_queries,
+            "answer_type": "knowledge",
+            "used_citations": used_citations,
+            "final_answer_preview": final_answer[:200]
+        }
+        logger.info("[trace] event=final_response data={}", json.dumps(final_trace_data))
+        logger.info("=== RETRIEVAL WORKFLOW END ===")
         
         return final_answer, sorted(used_citations), "knowledge", citation_map 

@@ -22,7 +22,7 @@ The codebase is a **research testbed (June 2025)** for evaluating whether such c
 
 - **Complete Web Interface**: Modern React + TypeScript chat application
 - **Conversation Intelligence**: Automatic detection of chitchat vs knowledge queries
-- **Citation System**: Inline citations with detailed source metadata
+- **Citation System**: Inline citations and a sidebar showing all consulted sources for full transparency.
 - **Document Classification**: Support for authored works, library items, biographical materials, and traces
 - **Vector Search**: PostgreSQL with pgvector for semantic similarity search
 - **ReAct Agent**: Intelligent reasoning using OpenAI function calling
@@ -214,7 +214,7 @@ The system supports configurable document classification. Current example types 
 **✅ What Works:**
 - Complete web chat interface with modern UI
 - Conversation intelligence (chitchat vs knowledge modes)
-- Backend API with vector search capabilities
+- Backend API with vector search capabilities and full evidence transparency
 - OpenAI integration for embeddings and responses
 - PostgreSQL + pgvector database setup
 - CSV metadata parsing and ingestion pipeline
