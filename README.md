@@ -90,22 +90,35 @@ npm run dev
 
 #### Using the Chat Interface
 
-- **Greetings**: Try "Hello" or "Ciao" for friendly responses
-- **Questions**: Ask "Who was Emanuele Artom?" (currently returns "no information found" until documents are ingested)
-- **Sources**: Click the menu (☰) to view citations sidebar
-- **Modes**: The header shows conversation mode (Conversational/Knowledge)
+- **Greetings**: Try "Hello" or "Ciao" for friendly chitchat.
+- **Knowledge Questions**: Once you have ingested documents (see below), ask questions like "Who was Emanuele Artom?" or "Did Artom read Benedetto Croce?" to get grounded, cited answers.
+- **Sources**: Click the menu (☰) to view the sources the agent consulted for its answer. The UI shows all consulted sources for full transparency, even if not explicitly cited in the text.
 
-#### Document Ingestion (Optional)
+### Ingesting Documents (Recommended)
 
-```bash
-# Ingest CSV metadata
-uv run python ingest.py source_data/inventario_Artom_Prandi.csv --batch-name demo
+To unlock the full RAG capabilities of the application, you must ingest the provided sample dataset.
 
-# Check status
-uv run rag-ingest list-batches
-```
+1. **Run the Ingestion Script**
 
-**Note**: The system works without ingested documents but provides more meaningful responses with actual content.
+   The simplest way is to use the standalone `ingest.py` script. This will process the metadata, chunk the content, and generate the necessary embeddings.
+
+   ```bash
+   uv run python ingest.py source_data/inventario_Artom_Prandi.csv --batch-name "artom-collection-v1"
+   ```
+
+2. **Verify Ingestion Status**
+
+   You can check the status of your ingestion batches using the `rag-ingest` CLI tool.
+
+   ```bash
+   # List all ingestion batches
+   uv run rag-ingest list-batches
+
+   # Get detailed status for a specific batch
+   uv run rag-ingest status --batch-id <your-batch-id>
+   ```
+
+Now that the database is populated, the chat interface will be able to answer knowledge-based questions.
 
 ## Project Structure
 
@@ -220,12 +233,11 @@ The system supports configurable document classification. Current example types 
 - CSV metadata parsing and ingestion pipeline
 
 **⚠️ Current Limitations:**
-- Archive needs actual document content for meaningful knowledge responses
-- Without ingested documents, knowledge questions return "no information found"
+- The application requires document ingestion to provide knowledge-based answers. A sample dataset is provided in `source_data/`.
 - Production deployment configuration not yet set up
 
 **🎯 Try It:**
-The application demonstrates the full conversational interface and intelligent mode detection even without document content. Once documents with text are ingested, it will provide cited, scholarly responses.
+To experience the full power of the application, ingest the sample dataset using the instructions above. This will enable the agent to provide cited, scholarly responses to your questions about the Emanuele Artom collection.
 
 **📚 Research Purpose:**
 This system serves as a testbed for evaluating how conversational AI can improve access to library and archival collections, with applications in digital humanities, library science, and information retrieval research.
