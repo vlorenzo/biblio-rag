@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.models import (
     Batch,
     BatchStatus,
@@ -116,13 +117,19 @@ class IngestionService:
     ) -> List[Chunk]:
         """Save a list of prepared chunks to the database."""
         if not prepared_chunks:
+            logger.info(f"[ingestion] No chunks to save for document {document.id}")
             return []
 
+        logger.info(f"[ingestion] Preparing {len(prepared_chunks)} chunks for database save")
+        
         chunks_to_create = []
+        missing_embeddings = 0
+        
         for i, p_chunk in enumerate(prepared_chunks):
             embedding = embeddings[i] if i < len(embeddings) else None
             if embedding is None:
-                logger.warning(f"Missing embedding for chunk {i} of doc {document.id}")
+                missing_embeddings += 1
+                logger.warning(f"[ingestion] Missing embedding for chunk {i} of doc {document.id}")
 
             chunks_to_create.append(
                 Chunk(
@@ -138,13 +145,20 @@ class IngestionService:
                 )
             )
         
+        if missing_embeddings > 0:
+            logger.warning(f"[ingestion] {missing_embeddings}/{len(prepared_chunks)} chunks missing embeddings")
+        
+        logger.info(f"[ingestion] Saving {len(chunks_to_create)} chunks to database...")
         self.session.add_all(chunks_to_create)
         await self.session.commit()
+        logger.info(f"[ingestion] Database commit successful")
         
         # Refresh to get DB-assigned values
+        logger.info(f"[ingestion] Refreshing chunk objects from database...")
         for chunk in chunks_to_create:
             await self.session.refresh(chunk)
             
+        logger.info(f"[ingestion] Successfully saved {len(chunks_to_create)} chunks to database")
         return chunks_to_create
     
     def _prepare_data_for_ingestion(
@@ -258,39 +272,62 @@ class IngestionService:
         batch = await self.create_batch(batch_name, parameters)
         batch.total_documents = len(prepared_data)
         await self.update_batch_status(batch, BatchStatus.PROCESSING)
+        logger.info(f"[ingestion] Starting batch processing: {len(prepared_data)} documents")
 
         total_chunks_processed = 0
         
         try:
-            for doc_data, prepared_files, prepared_chunks in prepared_data:
+            for doc_idx, (doc_data, prepared_files, prepared_chunks) in enumerate(prepared_data):
+                logger.info(f"[ingestion] Processing document {doc_idx + 1}/{len(prepared_data)}: '{doc_data.title}'")
+                
                 # Save the main document metadata
+                logger.info(f"[ingestion] Saving document metadata to database")
                 document = await self.save_document(doc_data)
+                logger.info(f"[ingestion] Document saved with ID: {document.id}")
 
                 # Save associated content file records
+                logger.info(f"[ingestion] Saving {len(prepared_files)} content file records")
                 for p_file in prepared_files:
                     await self.save_content_file(document, p_file.filename, p_file.file_path, p_file.checksum)
+                    logger.info(f"[ingestion] Content file saved: {p_file.filename}")
 
                 if prepared_chunks:
+                    logger.info(f"[ingestion] Processing {len(prepared_chunks)} chunks for embeddings")
                     # Fetch embeddings for all chunks of this document at once
                     chunk_texts = [p_chunk.text for p_chunk in prepared_chunks]
                     
                     # Run the synchronous embedding call in a thread pool
+                    logger.info(f"[ingestion] Calling OpenAI API for {len(chunk_texts)} embeddings (batch_size={settings.embedding_batch_size})")
                     embeddings = await loop.run_in_executor(
-                        None, self.embedding_service.get_embeddings_batch, chunk_texts
+                        None, 
+                        lambda: self.embedding_service.get_embeddings_batch(chunk_texts, batch_size=settings.embedding_batch_size)
                     )
+                    logger.info(f"[ingestion] Received {len(embeddings)} embeddings from OpenAI")
+                    
+                    # Check for embedding failures
+                    missing_embeddings = sum(1 for e in embeddings if e is None)
+                    if missing_embeddings > 0:
+                        logger.error(f"[ingestion] {missing_embeddings}/{len(embeddings)} embeddings failed - SKIPPING DOCUMENT")
+                        logger.error(f"[ingestion] Document '{doc_data.title}' will not be saved due to embedding failures")
+                        continue  # Skip this document entirely
                     
                     # Save chunk records with their embeddings
+                    logger.info(f"[ingestion] Saving {len(prepared_chunks)} chunks to database")
                     chunks_saved = await self.save_chunks(document, batch, prepared_chunks, embeddings)
                     total_chunks_processed += len(chunks_saved)
+                    logger.info(f"[ingestion] Saved {len(chunks_saved)} chunks to database")
+                else:
+                    logger.info(f"[ingestion] No chunks to process for document: {doc_data.title}")
                 
                 batch.processed_documents += 1
+                logger.info(f"[ingestion] Document {doc_idx + 1}/{len(prepared_data)} complete. Total chunks so far: {total_chunks_processed}")
             
             batch.total_chunks = total_chunks_processed
             await self.update_batch_status(batch, BatchStatus.COMPLETED)
-            logger.info(f"Ingestion completed for batch {batch.id}. Processed {batch.processed_documents} documents and {batch.total_chunks} chunks.")
+            logger.info(f"[ingestion] Batch processing complete! Processed {batch.processed_documents} documents and {batch.total_chunks} chunks.")
 
         except Exception as e:
-            logger.error(f"Asynchronous processing failed for batch {batch.id}: {e}", exc_info=True)
+            logger.error(f"[ingestion] Batch processing failed for batch {batch.id}: {e}", exc_info=True)
             await self.update_batch_status(batch, BatchStatus.FAILED, str(e))
             raise
         

@@ -29,7 +29,8 @@ class Settings(BaseSettings):
         description="OpenAI embedding model",
     )
     openai_chat_model: str = Field(
-        default="gpt-4o-mini",
+        #default="gpt-4o-mini",
+        default="gpt-4.1",
         description="OpenAI chat model",
     )
 
@@ -46,6 +47,9 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=100, description="Chunk overlap")
     max_concurrent_embeddings: int = Field(
         default=10, description="Max concurrent embedding requests"
+    )
+    embedding_batch_size: int = Field(
+        default=20, description="Batch size for OpenAI embedding requests"
     )
 
     # RAG

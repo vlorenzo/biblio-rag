@@ -284,3 +284,94 @@ Without ingested content, the system safely returns "I can't answer that questio
 - `"Who was Emanuele Artom?"` → Proper knowledge answer with citations when corpus available (knowledge mode)
 
 This enhancement was not in the original plan but emerged from user experience considerations during testing. It demonstrates the value of iterative development and user feedback in academic software projects.
+
+## 9. Operational Improvements Session (December 2024)
+
+### **Session Overview**
+This session focused on **operational improvements** rather than new features, enhancing the system's reliability, observability, and user experience. The changes represent a maturation of the existing codebase with production-ready enhancements.
+
+### **Specific Changes Made**
+
+#### **1. Model Configuration Upgrade** (`backend/config.py`)
+- **Changed OpenAI model**: From `gpt-4o-mini` to `gpt-4.1` for better performance
+- **Added embedding batch size**: New `embedding_batch_size` parameter (default: 20) for configurable batch processing
+- **Rationale**: The smarter agent implementation required a more capable model, and batch size configuration enables better throughput tuning
+
+#### **2. Smart Agent Behavioral Refinements** (`backend/rag/agent/smart_agent.py`)
+- **Enhanced search behavior**: Added emphasis on "**SEARCH BEFORE CLAIMING IGNORANCE**" to prevent premature refusal
+- **Improved user experience**: Agent now searches the collection before concluding information doesn't exist
+- **Minor prompt refinements**: Clearer instructions about when to search vs. when to provide direct responses
+- **Rationale**: User testing revealed the agent was too quick to claim ignorance, missing potentially relevant documents
+
+#### **3. Guardrails Policy Relaxation** (`backend/rag/guardrails/policy.py`)
+- **Increased chitchat response limit**: From 800 to 1500 characters (~200 to ~375 words)
+- **Enhanced conversational capacity**: Allows for more substantive biographical or explanatory responses
+- **Rationale**: Academic conversations often require more detailed responses than the original limit allowed
+
+#### **4. Production-Ready Embedding Service** (`backend/services/embedding_service.py`)
+- **Comprehensive logging**: Added `[embedding]` prefixes throughout for better debugging
+- **Intelligent batch processing**: Automatic batch splitting with configurable size
+- **Enhanced error handling**: Better retry logic and failure reporting
+- **Performance monitoring**: API call timing and success rate tracking
+- **Rate limiting courtesy**: 0.1s delays between batches to respect OpenAI's rate limits
+- **Rationale**: Production ingestion requires robust, observable, and well-behaved API interactions
+
+#### **5. Robust Ingestion Pipeline** (`backend/services/ingestion_service.py`)
+- **Detailed progress tracking**: Step-by-step logging of document and chunk processing
+- **Improved error handling**: Documents with embedding failures are skipped rather than failing the entire batch
+- **Batch processing optimization**: Uses configurable batch sizes from settings
+- **Enhanced observability**: Comprehensive logging of ingestion workflow
+- **Rationale**: Large-scale ingestion requires resilient processing and detailed monitoring
+
+#### **6. Enhanced Text Chunker** (`backend/services/text_chunker.py`)
+- **Comprehensive logging**: Progress tracking with `[chunker]` prefixes
+- **Simplified algorithm**: Removed complex sentence boundary detection in favor of robust word boundaries
+- **Better performance**: Progress logging every 100 chunks and 500 paragraphs
+- **Encoding robustness**: Enhanced file encoding detection and error handling
+- **Processing summaries**: Statistical reporting of chunking results
+- **Rationale**: Text processing needs to handle diverse document types reliably with good visibility into processing steps
+
+### **Key Behavioral Improvements**
+
+#### **Enhanced User Experience**
+- **Smarter search behavior**: Agent searches collection before claiming ignorance
+- **More natural responses**: Increased character limits for conversational responses
+- **Better model performance**: Upgraded to more capable OpenAI model
+
+#### **Production Reliability**
+- **Graceful degradation**: Failed embeddings skip documents rather than crashing batches
+- **Comprehensive monitoring**: Detailed logging across all services
+- **Configurable performance**: Batch sizes and limits are now configurable
+
+#### **Operational Excellence**
+- **Debugging support**: Consistent logging prefixes make troubleshooting easier
+- **Progress visibility**: Users can track ingestion progress in real-time
+- **Error transparency**: Clear error messages help diagnose issues quickly
+
+### **Impact Assessment**
+
+#### **Immediate Benefits**
+- **Better user experience**: More helpful responses and reduced false negatives
+- **Improved reliability**: Ingestion process more robust against individual failures
+- **Enhanced observability**: Much easier to debug issues and monitor performance
+
+#### **Long-term Value**
+- **Maintainability**: Comprehensive logging reduces debugging time
+- **Scalability**: Configurable batch processing enables performance tuning
+- **Production readiness**: Enhanced error handling and monitoring prepare system for production use
+
+### **Technical Debt Reduction**
+- **Logging standardization**: Consistent `[service]` prefixes across all components
+- **Configuration management**: Centralized batch size and performance settings
+- **Error handling patterns**: Uniform approach to error reporting and recovery
+
+### **Development Philosophy**
+This session exemplified **incremental improvement** over feature development:
+- Focus on operational excellence rather than new capabilities
+- Emphasis on observability and debugging support
+- Production-ready error handling and recovery
+- User experience refinement based on real usage patterns
+
+**Total effort**: ~4 hours of focused improvement work touching 6 core modules with immediate production benefits.
+
+The changes represent a natural evolution from a working prototype to a production-ready system, emphasizing reliability, observability, and user experience over new features.

@@ -54,8 +54,9 @@ def apply_guardrails(
             return REFUSAL_CHITCHAT
         
         # Much more generous length limit for conversational responses
-        # Allow up to ~200 words (800 characters) for warm, engaging responses
-        if len(answer_text) > 800:
+        # Allow up to ~375 words (1500 characters) for warm, engaging responses
+        # This allows for substantive biographical or explanatory responses
+        if len(answer_text) > 1500:
             return REFUSAL_CHITCHAT
 
     if messages is not None:

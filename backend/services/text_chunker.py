@@ -60,78 +60,90 @@ class TextChunker:
     
     def load_text_file(self, file_path: Path) -> str:
         """Load text from file with encoding detection."""
+        logger.info(f"[chunker] Loading text file: {file_path}")
         try:
             # Try UTF-8 first
             with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
+                content = f.read()
+                logger.info(f"[chunker] File loaded successfully: {len(content)} characters")
+                return content
         except UnicodeDecodeError:
+            logger.info(f"[chunker] UTF-8 failed, trying latin-1 encoding")
             try:
                 # Fallback to latin-1
                 with open(file_path, 'r', encoding='latin-1') as f:
-                    return f.read()
+                    content = f.read()
+                    logger.info(f"[chunker] File loaded with latin-1: {len(content)} characters")
+                    return content
             except Exception as e:
                 logger.error(f"Failed to read file {file_path}: {e}")
                 raise
     
     def preprocess_text(self, text: str) -> str:
         """Preprocess text before chunking."""
+        logger.info(f"[chunker] Preprocessing text: {len(text)} characters")
         # Remove excessive whitespace
         text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Multiple newlines to double
         text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces/tabs to single space
         text = text.strip()
         
+        logger.info(f"[chunker] Text preprocessed: {len(text)} characters")
         return text
     
-    def find_sentence_boundaries(self, text: str) -> List[int]:
-        """Find sentence boundaries in text."""
-        # Simple sentence boundary detection
-        sentence_endings = re.finditer(r'[.!?]+\s+', text)
-        boundaries = [0]  # Start of text
-        
-        for match in sentence_endings:
-            boundaries.append(match.end())
-        
-        boundaries.append(len(text))  # End of text
-        return sorted(set(boundaries))
+
     
-    def find_paragraph_boundaries(self, text: str) -> List[int]:
-        """Find paragraph boundaries in text."""
-        paragraph_breaks = re.finditer(r'\n\s*\n', text)
-        boundaries = [0]  # Start of text
+    def find_word_boundary_near(self, text: str, position: int, window: int = 50) -> int:
+        """Find the nearest word boundary within a small window."""
+        if position >= len(text):
+            return len(text)
         
-        for match in paragraph_breaks:
-            boundaries.append(match.end())
+        # Look for whitespace within ±window characters
+        start_search = max(0, position - window)
+        end_search = min(len(text), position + window)
         
-        boundaries.append(len(text))  # End of text
-        return sorted(set(boundaries))
+        # Find last whitespace before position
+        for i in range(position, start_search - 1, -1):
+            if text[i].isspace():
+                return i + 1
+        
+        # If no whitespace found before, look after
+        for i in range(position, end_search):
+            if text[i].isspace():
+                return i + 1
+        
+        return position  # Fallback to exact position
     
     def chunk_by_sliding_window(self, text: str) -> List[TextChunk]:
-        """Chunk text using sliding window approach."""
+        """Simple and robust sliding window chunking."""
+        logger.info(f"[chunker] Starting sliding window chunking: {len(text)} chars, chunk_size={self.chunk_size}, overlap={self.chunk_overlap}")
+        
         if len(text) <= self.chunk_size:
+            logger.info(f"[chunker] Text fits in single chunk")
             return [TextChunk(text, 0, 0, len(text))]
         
         chunks = []
-        sequence_number = 0
         start = 0
+        sequence_number = 0
         
-        # Find sentence boundaries for better chunking
-        sentence_boundaries = self.find_sentence_boundaries(text)
+        # Calculate expected number of chunks for progress tracking
+        expected_chunks = max(1, (len(text) - self.chunk_overlap) // (self.chunk_size - self.chunk_overlap))
+        logger.info(f"[chunker] Expected to create approximately {expected_chunks} chunks")
         
         while start < len(text):
-            # Calculate end position
+            # Calculate basic end position
             end = min(start + self.chunk_size, len(text))
             
-            # Try to end at a sentence boundary if possible
+            # Try to end at a word boundary for better readability (optional smart boundary)
             if end < len(text):
-                # Find the last sentence boundary before or at the end position
-                suitable_boundaries = [b for b in sentence_boundaries if start < b <= end]
-                if suitable_boundaries:
-                    end = suitable_boundaries[-1]
+                word_boundary_end = self.find_word_boundary_near(text, end)
+                # Only use word boundary if it's not too far from target
+                if abs(word_boundary_end - end) <= 100:  # Within 100 chars is acceptable
+                    end = word_boundary_end
             
             # Extract chunk text
             chunk_text = text[start:end].strip()
             
-            # Skip chunks that are too small (unless it's the last chunk)
+            # Create chunk if it's substantial enough
             if len(chunk_text) >= self.min_chunk_size or end >= len(text):
                 chunk = TextChunk(
                     text=chunk_text,
@@ -141,40 +153,48 @@ class TextChunker:
                 )
                 chunks.append(chunk)
                 sequence_number += 1
+                
+                # Progress logging every 100 chunks
+                if len(chunks) % 100 == 0:
+                    progress = (len(chunks) / expected_chunks) * 100
+                    logger.info(f"[chunker] Progress: {len(chunks)} chunks created (~{progress:.1f}%)")
             
-            # Move start position with overlap
+            # Check if we've reached the end
             if end >= len(text):
                 break
             
             # Calculate next start position with overlap
-            overlap_start = max(start, end - self.chunk_overlap)
+            next_start = end - self.chunk_overlap
             
-            # Try to start at a sentence boundary if possible
-            suitable_start_boundaries = [b for b in sentence_boundaries if overlap_start <= b < end]
-            if suitable_start_boundaries:
-                start = suitable_start_boundaries[0]
-            else:
-                start = overlap_start
+            # Ensure we always make progress (critical for preventing infinite loops)
+            if next_start <= start:
+                next_start = start + 1
             
-            # Ensure we make progress
-            if start <= chunks[-1].start_char:
-                start = chunks[-1].end_char
+            start = next_start
         
-        logger.info(f"Created {len(chunks)} chunks from {len(text)} characters")
+        logger.info(f"[chunker] Sliding window chunking complete: created {len(chunks)} chunks from {len(text)} characters")
         return chunks
     
     def chunk_by_paragraphs(self, text: str) -> List[TextChunk]:
         """Chunk text by paragraphs, combining small ones."""
+        logger.info(f"[chunker] Starting paragraph-based chunking: {len(text)} characters")
+        
         paragraphs = re.split(r'\n\s*\n', text)
+        logger.info(f"[chunker] Found {len(paragraphs)} paragraphs")
+        
         chunks = []
         sequence_number = 0
         current_chunk = ""
         start_char = 0
         
-        for paragraph in paragraphs:
+        for i, paragraph in enumerate(paragraphs):
             paragraph = paragraph.strip()
             if not paragraph:
                 continue
+            
+            # Progress logging every 500 paragraphs
+            if i % 500 == 0 and i > 0:
+                logger.info(f"[chunker] Processing paragraph {i}/{len(paragraphs)}, chunks_created={len(chunks)}")
             
             # If adding this paragraph would exceed chunk size, finalize current chunk
             if current_chunk and len(current_chunk) + len(paragraph) + 2 > self.chunk_size:
@@ -209,15 +229,17 @@ class TextChunker:
             )
             chunks.append(chunk)
         
-        logger.info(f"Created {len(chunks)} paragraph-based chunks")
+        logger.info(f"[chunker] Paragraph chunking complete: created {len(chunks)} chunks")
         return chunks
     
     def chunk_text(self, text: str, method: str = "sliding_window") -> List[TextChunk]:
         """Chunk text using specified method."""
+        logger.info(f"[chunker] Starting text chunking with method: {method}")
+        
         text = self.preprocess_text(text)
         
         if not text or len(text) < self.min_chunk_size:
-            logger.warning("Text too short for chunking")
+            logger.warning(f"[chunker] Text too short for chunking: {len(text)} chars")
             return []
         
         if method == "sliding_window":
@@ -227,29 +249,56 @@ class TextChunker:
         else:
             raise ValueError(f"Unknown chunking method: {method}")
     
+    def _log_chunking_summary(self, file_path: Path, text_length: int, chunks: List[TextChunk], method: str) -> None:
+        """Log a summary of the chunking task."""
+        if not chunks:
+            logger.info(f"[chunker] SUMMARY: No chunks created from {file_path}")
+            return
+        
+        chunk_sizes = [len(chunk.text) for chunk in chunks]
+        avg_chunk_size = sum(chunk_sizes) / len(chunk_sizes)
+        min_chunk_size = min(chunk_sizes)
+        max_chunk_size = max(chunk_sizes)
+        
+        logger.info(f"[chunker] SUMMARY: {file_path.name}")
+        logger.info(f"[chunker]   - Input: {text_length:,} characters")
+        logger.info(f"[chunker]   - Method: {method}")
+        logger.info(f"[chunker]   - Output: {len(chunks)} chunks")
+        logger.info(f"[chunker]   - Chunk sizes: avg={avg_chunk_size:.0f}, min={min_chunk_size}, max={max_chunk_size}")
+        logger.info(f"[chunker]   - Settings: chunk_size={self.chunk_size}, overlap={self.chunk_overlap}")
+    
     def chunk_file(self, file_path: Path, method: str = "sliding_window") -> List[TextChunk]:
         """Chunk a text file."""
-        logger.info(f"Chunking file: {file_path}")
+        logger.info(f"[chunker] Starting file chunking: {file_path} with method: {method}")
         
         text = self.load_text_file(file_path)
-        return self.chunk_text(text, method)
+        result = self.chunk_text(text, method)
+        
+        self._log_chunking_summary(file_path, len(text), result, method)
+        return result
     
     def create_full_document_chunk(self, text: str) -> TextChunk:
         """Create a single chunk from the entire document."""
+        logger.info(f"[chunker] Creating full document chunk: {len(text)} characters")
         text = self.preprocess_text(text)
-        return TextChunk(
+        chunk = TextChunk(
             text=text,
             sequence_number=0,
             start_char=0,
             end_char=len(text),
         )
+        logger.info(f"[chunker] Full document chunk created: {len(text)} characters")
+        return chunk
     
     def create_full_document_chunk_from_file(self, file_path: Path) -> TextChunk:
         """Create a single chunk from an entire file."""
-        logger.info(f"Creating full document chunk from: {file_path}")
+        logger.info(f"[chunker] Creating full document chunk from file: {file_path}")
         
         text = self.load_text_file(file_path)
-        return self.create_full_document_chunk(text)
+        result = self.create_full_document_chunk(text)
+        
+        logger.info(f"[chunker] Full document chunk from file complete: {file_path}")
+        return result
 
 
 def chunk_text_file(

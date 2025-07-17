@@ -28,9 +28,11 @@ class EmbeddingService:
     
     def get_embedding(self, text: str) -> List[float]:
         """Get embedding for a single text."""
+        logger.info(f"[embedding] Getting single embedding for text (length: {len(text)} chars)")
+        
         for attempt in range(self.max_retries):
             try:
-                logger.debug(f"Getting embedding for text (length: {len(text)})")
+                logger.debug(f"[embedding] API call attempt {attempt + 1}/{self.max_retries}")
                 
                 response = self.client.embeddings.create(
                     model=self.model,
@@ -39,52 +41,94 @@ class EmbeddingService:
                 )
                 
                 embedding = response.data[0].embedding
-                logger.debug(f"Successfully generated embedding (dimension: {len(embedding)})")
+                logger.info(f"[embedding] Successfully generated embedding (dimension: {len(embedding)})")
                 return embedding
                 
             except openai.RateLimitError as e:
                 delay = self.initial_delay * (2 ** attempt)
-                logger.warning(f"Rate limit exceeded. Retrying in {delay:.2f}s... (Attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(f"[embedding] Rate limit exceeded. Retrying in {delay:.2f}s... (Attempt {attempt + 1}/{self.max_retries})")
                 time.sleep(delay)
                 
             except openai.APIError as e:
-                logger.error(f"OpenAI API error on attempt {attempt + 1}: {e}")
+                logger.error(f"[embedding] OpenAI API error on attempt {attempt + 1}: {e}")
                 if attempt == self.max_retries - 1:
-                    logger.error(f"OpenAI API error after {self.max_retries} attempts: {e}")
+                    logger.error(f"[embedding] OpenAI API error after {self.max_retries} attempts: {e}")
                     raise
                 
             except Exception as e:
-                logger.error(f"Unexpected error getting embedding: {e}")
+                logger.error(f"[embedding] Unexpected error getting embedding: {e}")
                 raise
         
         raise Exception(f"Failed to get embedding after {self.max_retries} attempts")
     
-    def get_embeddings_batch(self, texts: List[str]) -> List[Optional[List[float]]]:
+    def get_embeddings_batch(self, texts: List[str], batch_size: int = 20) -> List[Optional[List[float]]]:
         """
-        Generates embeddings for a batch of texts using the synchronous client.
-        This is a blocking I/O operation and should be run in a thread pool.
+        Generates embeddings for a batch of texts using automatic batching.
+        Splits large batches into smaller ones to respect OpenAI rate limits.
         """
         if not texts:
+            logger.info(f"[embedding] Empty batch, returning empty list")
             return []
+        
+        logger.info(f"[embedding] Starting batch embedding for {len(texts)} texts (batch_size={batch_size})")
+        
+        # Log text lengths for debugging
+        text_lengths = [len(text) for text in texts]
+        logger.info(f"[embedding] Text lengths: min={min(text_lengths)}, max={max(text_lengths)}, avg={sum(text_lengths)/len(text_lengths):.1f}")
         
         # OpenAI API errors on empty strings, so we replace them with a space.
         texts = [text or " " for text in texts]
 
+        all_embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size  # Ceiling division
+        
+        for batch_idx in range(0, len(texts), batch_size):
+            batch_texts = texts[batch_idx:batch_idx + batch_size]
+            batch_num = (batch_idx // batch_size) + 1
+            
+            logger.info(f"[embedding] Processing batch {batch_num}/{total_batches} ({len(batch_texts)} texts)")
+            
+            # Process this smaller batch
+            batch_embeddings = self._get_single_batch_embeddings(batch_texts)
+            all_embeddings.extend(batch_embeddings)
+            
+            # Small delay between batches to be nice to OpenAI
+            if batch_num < total_batches:
+                logger.info(f"[embedding] Waiting 0.1s before next batch...")
+                time.sleep(0.1)
+        
+        successful_count = sum(1 for e in all_embeddings if e is not None)
+        logger.info(f"[embedding] Batch embedding complete: {successful_count}/{len(texts)} embeddings generated")
+        
+        return all_embeddings
+    
+    def _get_single_batch_embeddings(self, texts: List[str]) -> List[Optional[List[float]]]:
+        """Get embeddings for a single small batch (internal method)."""
         for attempt in range(self.max_retries):
             try:
+                logger.debug(f"[embedding] Calling OpenAI API for batch of {len(texts)} texts (attempt {attempt + 1}/{self.max_retries})")
+                start_time = time.time()
+                
                 response = self.client.embeddings.create(input=texts, model=self.model)
-                return [embedding.embedding for embedding in response.data]
+                
+                end_time = time.time()
+                duration = end_time - start_time
+                logger.info(f"[embedding] OpenAI API call successful in {duration:.2f}s for {len(texts)} texts")
+                
+                embeddings = [embedding.embedding for embedding in response.data]
+                return embeddings
+                
             except openai.RateLimitError as e:
                 delay = self.initial_delay * (2 ** attempt)
-                logger.warning(f"Rate limit exceeded. Retrying in {delay:.2f}s... (Attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(f"[embedding] Rate limit exceeded. Retrying in {delay:.2f}s... (Attempt {attempt + 1}/{self.max_retries})")
                 time.sleep(delay)
             except openai.APIError as e:
-                logger.error(f"OpenAI API error on attempt {attempt + 1}: {e}")
+                logger.error(f"[embedding] OpenAI API error on attempt {attempt + 1}: {e}")
                 if attempt == self.max_retries - 1:
-                    logger.error(f"OpenAI API error after {self.max_retries} attempts: {e}")
+                    logger.error(f"[embedding] OpenAI API error after {self.max_retries} attempts: {e}")
                     return [None] * len(texts) # Return None for all if final attempt fails
         
-        logger.error("Failed to get embeddings after all retries.")
+        logger.error(f"[embedding] Failed to get embeddings after all retries for batch of {len(texts)} texts")
         return [None] * len(texts)
     
     def get_embeddings_with_progress(
