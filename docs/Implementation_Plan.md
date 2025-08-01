@@ -285,7 +285,7 @@ Without ingested content, the system safely returns "I can't answer that questio
 
 This enhancement was not in the original plan but emerged from user experience considerations during testing. It demonstrates the value of iterative development and user feedback in academic software projects.
 
-## 9. Operational Improvements Session (December 2024)
+## 9. Operational Improvements Session (17/07/2025)
 
 ### **Session Overview**
 This session focused on **operational improvements** rather than new features, enhancing the system's reliability, observability, and user experience. The changes represent a maturation of the existing codebase with production-ready enhancements.
@@ -374,4 +374,4 @@ This session exemplified **incremental improvement** over feature development:
 
 **Total effort**: ~4 hours of focused improvement work touching 6 core modules with immediate production benefits.
 
-The changes represent a natural evolution from a working prototype to a production-ready system, emphasizing reliability, observability, and user experience over new features.
+The changes represent a natural evolution from a working prototype to a production-ready system, emphasizing reliability, observability, and user experience over new features. 
