@@ -53,7 +53,6 @@ F-12 — Health & metrics endpoints (`/healthz`, `/metrics`)
 
 ## 5. Non-Functional Requirements  
 • Accuracy: Chat must not hallucinate; every factual span must be sourced  
-• Latency: P99 ≤ 1.5 s (retrieval + generation) with cached embeddings  
 • Scalability: ≥ 1 k concurrent chat sessions  
 • Security: TLS everywhere; secrets in env vars  
 • Observability: Structured logs, tracing, and basic Prometheus metrics  
