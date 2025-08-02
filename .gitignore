@@ -151,3 +151,4 @@ uploads/
 logs/
 *.db 
 source_data/
+local_backup.sql

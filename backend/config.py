@@ -1,6 +1,6 @@
 """Application configuration management."""
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,14 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://postgres:postgres@localhost:5433/rag_unito",
         description="Database connection URL",
     )
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def adapt_database_url_for_async(cls, v: str) -> str:
+        """Ensure the database URL is suitable for asyncpg."""
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     # OpenAI
     openai_api_key: str = Field(

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -28,12 +29,19 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
 # Include API routes under root (no prefix)
 app.include_router(api_router)
+
+
+# Mount the static directory to serve the frontend
+# This must be after the API routes to avoid conflicts.
+# The `html=True` argument tells FastAPI to serve `index.html` for any path not found.
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 
 
 # Optional root handler (not required but nice UX)

@@ -11,9 +11,23 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from backend.models import *  # noqa: F403, F401
 from sqlmodel import SQLModel
 
+import os
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Get the DATABASE_URL from environment variable if it exists
+database_url = os.getenv("DATABASE_URL")
+
+# If DATABASE_URL is set, override the sqlalchemy.url from alembic.ini
+# This is crucial for production environments like Fly.io
+if database_url:
+    # The URL needs to be adapted for asyncpg if it's not already
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    config.set_main_option("sqlalchemy.url", database_url)
+
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
