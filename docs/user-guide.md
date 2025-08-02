@@ -1,6 +1,6 @@
 # User Guide
 
-This guide covers how to use RAG Unito's chat interface and manage document ingestion.
+This guide covers how to use Biblio RAG's chat interface and manage document ingestion.
 
 ## Using the Chat Interface
 
@@ -12,7 +12,7 @@ This guide covers how to use RAG Unito's chat interface and manage document inge
 
 ### Conversation Modes
 
-RAG Unito automatically detects and adapts to different conversation types:
+Biblio RAG automatically detects and adapts to different conversation types:
 
 **Chitchat Mode** 🗨️
 - General greetings and casual conversation
@@ -83,7 +83,7 @@ classical Greek texts, and modern European literature...
 
 ### Overview
 
-RAG Unito requires document ingestion to provide knowledge-based responses. The system processes CSV metadata files that reference text content files, creating searchable embeddings.
+Biblio RAG requires document ingestion to provide knowledge-based responses. The system processes CSV metadata files that reference text content files, creating searchable embeddings.
 
 ### Document Classes
 
@@ -172,7 +172,7 @@ uv run rag-ingest status --batch-id <batch-id>
 
 ### Sample Data
 
-RAG Unito includes the **Emanuele Artom** collection for testing:
+Biblio RAG includes the **Emanuele Artom** collection for testing:
 
 **Files**:
 - `source_data/inventario_Artom_Prandi.csv`: Library inventory metadata (125 entries)

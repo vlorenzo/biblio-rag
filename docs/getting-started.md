@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide covers detailed installation and deployment options for RAG Unito.
+This guide covers detailed installation and deployment options for Biblio RAG.
 
 ## Prerequisites
 
@@ -20,8 +20,8 @@ This guide covers detailed installation and deployment options for RAG Unito.
 
 **1. Clone and Setup Dependencies**
 ```bash
-git clone https://github.com/vlorenzo/rag-unito.git
-cd rag-unito
+git clone https://github.com/vlorenzo/biblio-rag.git
+cd biblio-rag
 
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -79,8 +79,8 @@ cd frontend && npm run dev
 **Full Application Stack**
 ```bash
 # Clone repository
-git clone https://github.com/vlorenzo/rag-unito.git
-cd rag-unito
+git clone https://github.com/vlorenzo/biblio-rag.git
+cd biblio-rag
 
 # Create environment file
 cp env.example .env

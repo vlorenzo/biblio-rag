@@ -1,10 +1,10 @@
 # Architecture
 
-This document provides a comprehensive overview of RAG Unito's technical architecture and implementation.
+This document provides a comprehensive overview of Biblio RAG's technical architecture and implementation.
 
 ## System Overview
 
-RAG Unito is a three-tier web application designed for conversational access to bibliographic archives. The system combines modern web technologies with intelligent AI agents to provide grounded, cited responses about scholarly collections.
+Biblio RAG is a three-tier web application designed for conversational access to bibliographic archives. The system combines modern web technologies with intelligent AI agents to provide grounded, cited responses about scholarly collections.
 
 ### High-Level Architecture
 

@@ -1,10 +1,10 @@
-# RAG Unito
+# Biblio RAG
 
 A conversational AI system for bibliographic archives that enables natural language interaction with scholarly collections. Built as a research testbed for evaluating Retrieval-Augmented Generation (RAG) technologies in digital humanities and library science.
 
 ## Overview
 
-RAG Unito transforms traditional archive search into intelligent conversation. Users can ask complex questions about historical collections and receive grounded, cited responses that reference primary sources. The system currently contains the Emanuele Artom bibliographic archive for research and evaluation.
+Biblio RAG transforms traditional archive search into intelligent conversation. Users can ask complex questions about historical collections and receive grounded, cited responses that reference primary sources. The system currently contains the Emanuele Artom bibliographic archive for research and evaluation.
 
 ### Key Capabilities
 
