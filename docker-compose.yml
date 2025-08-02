@@ -1,0 +1,52 @@
+version: '3.8'
+
+# Questo file è per i test di integrazione locali.
+# Orchestra l'intera applicazione in container per simulare la produzione.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag_unito-postgres-1 
+    environment:
+      - POSTGRES_DB=rag_unito
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      # Si aggancia al volume esistente 'rag_unito_postgres_data'.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - rag_unito_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_unito_app
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/rag_unito
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag_unito_network
+
+volumes:
+  # Questa è la sintassi corretta e flessibile.
+  # Dice a Docker Compose di usare un volume chiamato 'postgres_data'
+  # per questo progetto. Docker lo mapperà automaticamente al volume
+  # fisico 'rag_unito_postgres_data' che già esiste.
+  postgres_data: {}
+
+networks:
+  rag_unito_network:
+    driver: bridge
