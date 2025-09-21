@@ -64,7 +64,7 @@ class CSVMetadataParser:
         """Detect CSV type from filename."""
         filename = csv_path.stem.lower()
         
-        if "inventario" in filename:
+        if "inventario" in filename or filename.startswith("archivio"):
             return "inventario"
         elif "opera" in filename:
             return "opera"
@@ -84,6 +84,8 @@ class CSVMetadataParser:
             return DocumentClass.AUTHORED_BY_SUBJECT
         elif filename.startswith("su"):
             return DocumentClass.ABOUT_SUBJECT
+        elif filename.startswith("archivio"):
+            return DocumentClass.SUBJECT_TRACES
         else:
             logger.warning(f"Unknown document class for {csv_path}, defaulting to SUBJECT_LIBRARY")
             return DocumentClass.SUBJECT_LIBRARY
@@ -266,8 +268,8 @@ class CSVMetadataParser:
             # Try different extensions and paths (existing logic)
             possible_paths = [
                 self.content_base_path / ref,
-                self.content_base_path / f"{Path(ref).stem}.txt",
-                self.content_base_path / f"{Path(ref).stem}.md",
+                (self.content_base_path / ref).with_suffix(".txt"),
+                (self.content_base_path / ref).with_suffix(".md"),
             ]
             
             for path in possible_paths:
