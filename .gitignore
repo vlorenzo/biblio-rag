@@ -152,3 +152,5 @@ logs/
 *.db 
 source_data/
 local_backup.sql
+db_full_dump_20250921.sql
+production_flydb_dump.sql
