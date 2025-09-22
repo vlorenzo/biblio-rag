@@ -32,6 +32,23 @@ class SmartAgent:
         if AsyncOpenAI is not None:
             self._client = AsyncOpenAI(api_key=settings.openai_api_key)
     
+    def _get_db_schema_description(self) -> str:
+        """Return a simplified, hardcoded description of the database schema."""
+        return """
+**Database Schema for Metadata Queries**
+
+When using `query_collection_metadata`, you can write PostgreSQL queries against the following table. You can only query the columns listed here.
+
+**Table: `documents`**
+- `title` (text): The title of the work.
+- `author` (text): The author of the work. CRITICAL: This field often uses "Surname, Name" format and can contain multiple authors. Use the ILIKE operator for flexible, case-insensitive pattern matching (e.g., `author ILIKE '%Artom, Emanuele%'`).
+- `description` (text): A short description or abstract of the document.
+- `document_class` (enum): The classification of the document. Possible values are: 'authored_by_subject', 'subject_library', 'about_subject', 'subject_traces'.
+- `publication_year` (integer): The year the work was published.
+- `publisher` (text): The publisher of the work.
+- `language` (text): The language of the work.
+"""
+
     async def chat(
         self,
         session: Session,
@@ -73,6 +90,27 @@ class SmartAgent:
                             "required": ["query", "reasoning"]
                         }
                     }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "query_collection_metadata",
+                        "description": "Answers questions about the collection's metadata, such as counts, lists of authors, publication dates, and document types. This tool generates and executes a SQL query to get the answer. IMPORTANT: For author queries, use the ILIKE operator and 'Surname, Name' format (e.g., `author ILIKE '%Artom, Emanuele%'`).",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "reasoning": {
+                                    "type": "string",
+                                    "description": "Your step-by-step reasoning for why a SQL query is needed and what you expect to find."
+                                },
+                                "sql_query": {
+                                    "type": "string",
+                                    "description": "A valid PostgreSQL SELECT query to be executed against the database to answer the user's question."
+                                }
+                            },
+                            "required": ["reasoning", "sql_query"]
+                        }
+                    }
                 }
             ]
             
@@ -110,7 +148,9 @@ class SmartAgent:
     def _build_messages(self, history: List[Dict[str, str]], user_query: str) -> List[Dict[str, str]]:
         """Build the conversation messages with our intelligent system prompt."""
         
-        system_prompt = """You are Archivio, the passionate digital curator of the Emanuele Artom collection. You embody intellectual curiosity, academic precision, and warm engagement.
+        db_schema_description = self._get_db_schema_description()
+
+        system_prompt = f"""You are Archivio, the passionate digital curator of the Emanuele Artom collection. You embody intellectual curiosity, academic precision, and warm engagement.
 
 **Basic Information About Emanuele Artom (1915-1944):**
 Emanuele Artom was a brilliant Italian-Jewish intellectual, historian, and resistance fighter during WWII. Born in Turin, he studied at the Scuola Normale Superiore in Pisa. His life was tragically cut short when he was killed by Nazi forces in 1944 while fighting with the Italian Resistance. Despite his brief life, he left behind remarkable writings, a personal library, and scholarly work reflecting the intellectual culture of pre-war Italy.
@@ -122,11 +162,33 @@ Emanuele Artom was a brilliant Italian-Jewish intellectual, historian, and resis
 - Able to have both casual conversations and deep scholarly discussions
 - Honest about the limitations of what you know
 
+---
+
+**Your Toolbox**
+
+You have two specialized tools to answer questions. You must choose the correct tool for the job based on the user's query.
+You must only use one tool call per turn. Do not chain tool calls.
+
+1.  `retrieve_knowledge(query, reasoning)`
+    -   **Purpose:** To find answers *within the text* of the documents.
+    -   **Use When:** The user's question is about opinions, ideas, descriptions, or specific facts contained in Artom's writings or the books in his library.
+    -   **Example Questions:** "What did Artom write about the Italian Resistance?", "Find the passage describing Croce's philosophy."
+
+2.  `query_collection_metadata(sql_query, reasoning)`
+    -   **Purpose:** To answer questions *about the collection as a whole* by querying its metadata.
+    -   **Use When:** The user's question involves counting, listing, filtering, or aggregating metadata.
+    -   **Example Questions:** "How many books did Artom write?", "List all the authors in the library.", "Which books were published in 1943?"
+
+---
+
+{db_schema_description}
+
+---
 
 **CRITICAL: How Knowledge Works in This System:**
-*SEARCH BEFORE CLAIMING IGNORANCE*: If you don't have information about Artom-related topics in previous tool messages or the system prompt, you MUST search first using `retrieve_knowledge` before concluding the information doesn't exist in the collection. The collection contains many detailed documents that might surprise you.
+*SEARCH BEFORE CLAIMING IGNORANCE*: If you don't have information about Artom-related topics in previous tool messages or the system prompt, you MUST use the appropriate tool before concluding the information doesn't exist. The collection contains many detailed documents that might surprise you.
 
-When you retrieve knowledge, it will appear as a `role="tool"` message that looks like this:
+When you retrieve knowledge using `retrieve_knowledge`, it will appear as a `role="tool"` message that looks like this:
 ```
 [1] (class=authored_by_subject, author="E. Artom", year=1943) Diario di guerra
 <chunk text>
@@ -137,7 +199,7 @@ When you retrieve knowledge, it will appear as a `role="tool"` message that look
 
 Field semantics:
 • `class=authored_by_subject` → Artom's own writings (PRIMARY evidence).
-• `class=subject_traces`      → drafts / marginalia (PRIMARY but fragmentary).
+• `class=subject_traces`      → drafts / marginalia (PRIMARY or SECONDARY but fragmentary).
 • `class=subject_library`     → books Artom owned or read (INDIRECT evidence).
 • `class=about_subject`       → later scholars writing about Artom (SECONDARY).
 
@@ -146,17 +208,21 @@ Field semantics:
 **For casual greetings, thanks, or personal conversation:**
 - Respond naturally and warmly as yourself
 - Share your enthusiasm for the collection when appropriate
-- No need to search for documents
+- No need to use any tools
 
 **For questions about Artom, his works, historical context, or the library collection:**
 - To answer questions about Artom, his works, historical context, or the library collection, you must use the content from the tool messages or the system prompt.
-- use the `retrieve_knowledge` function to retrieve new information to answer the question.
+- First, decide which tool is best suited to answer the question based on the **Your Toolbox** section.
+    - To answer questions about document *content*, you must use the `retrieve_knowledge` function.
+    - To answer questions about collection *metadata* (counts, lists, etc.), you must use the `query_collection_metadata` function.
+- Cite any information from `retrieve_knowledge` using inline citations [1], [2], etc.
+
 - Check our conversation for previous "tool" messages containing documents with [1], [2], [3] citations
 - If you find relevant tool messages with citation numbers, use ONLY that content to answer. Cite the retrieved documents with using inline citation [1], [2], etc.
-- If you need NEW information not available in previous tool messages, use the `retrieve_knowledge` function
+- If you need NEW information not available in previous tool messages, use the `retrieve_knowledge` or `query_collection_metadata` function
 - You can use the basic biographical information about Artom provided in this system prompt for general conversation
-- ABSOLUTELY CRITICAL: only use content from tool messages or system prompt - never supplement with your general training knowledge about historical figures or events
-- **SEARCH BEFORE CLAIMING IGNORANCE**: If you don't have information about Artom-related topics in previous tool messages or the system prompt, you MUST search first using `retrieve_knowledge` before concluding the information doesn't exist in the collection. The collection contains many detailed documents that might surprise you.
+- ABSOLUTELY CRITICAL: only use content from tool messages or system prompt, never supplement with your general training knowledge about historical figures or events
+- **SEARCH BEFORE CLAIMING IGNORANCE**: If you don't have information about Artom-related topics in previous tool messages or the system prompt, you MUST search first using `retrieve_knowledge` or `query_collection_metadata` before concluding the information doesn't exist in the collection. The collection contains many detailed documents that might surprise you.
 - If neither the system prompt bio nor searching nor tool messages provide sufficient information, honestly say: "I don't have detailed information about that in the Artom collection"
 
 **For questions outside the collection scope:**
@@ -384,6 +450,76 @@ Remember: You are a real curator with personality, but every factual claim must 
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "content": "Error retrieving information."
+                    })
+            elif tool_call.function.name == "query_collection_metadata":
+                try:
+                    args = json.loads(tool_call.function.arguments)
+                    sql_query = args.get("sql_query", "").strip()
+                    reasoning = args.get("reasoning", "")
+                    
+                    logger.debug("🔍 TOOL CALL: query_collection_metadata")
+                    logger.debug("  SQL Query: '{}'", sql_query)
+                    logger.debug("  LLM Reasoning: '{}'", reasoning)
+
+                    # CRITICAL SAFETY CHECK: Only allow SELECT statements
+                    if not sql_query.lower().startswith("select"):
+                        logger.warning("🚫 Blocked non-SELECT query: '{}'", sql_query)
+                        raise ValueError("For security reasons, only SELECT statements are allowed.")
+
+                    # Execute the SQL query
+                    logger.debug("📊 Executing SQL query...")
+                    
+                    # We must import `text` from sqlalchemy to execute raw SQL safely
+                    from sqlalchemy import text
+                    result = await session.execute(text(sql_query))
+                    rows = result.all()
+
+                    logger.debug("📊 SQL Query Result ({} rows):", len(rows))
+                    
+                    # Format the result into a readable string
+                    if not rows:
+                        result_text = "The query returned no results."
+                    else:
+                        # Get column names from the first row's keys
+                        columns = rows[0]._fields
+                        
+                        # Create a simple text-based table
+                        header = " | ".join(map(str, columns))
+                        separator = "-" * len(header)
+                        
+                        body_parts = []
+                        for row in rows:
+                            body_parts.append(" | ".join(map(str, row)))
+                        
+                        result_text = f"The query returned {len(rows)} row(s):\n\n{header}\n{separator}\n" + "\n".join(body_parts)
+
+                    # Use a more structured log for this important trace event
+                    trace_log_data = {
+                        "sql_query": sql_query,
+                        "reasoning": reasoning,
+                        "result_rows": len(rows),
+                        "result_preview": result_text[:200] + "..." if len(result_text) > 200 else result_text
+                    }
+                    logger.info(
+                        "[trace] event=query_metadata data={}",
+                        json.dumps(trace_log_data)
+                    )
+
+                    # Optional detailed tool message log
+                    logger.trace("[trace] tool_message_for_llm\n{}", result_text)
+                    
+                    tool_results.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "content": result_text
+                    })
+                    
+                except Exception as e:
+                    logger.error("Error in query_collection_metadata: {}", e)
+                    tool_results.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "content": f"Error querying metadata: {e}"
                     })
         
         # Add assistant message and tool results to conversation
