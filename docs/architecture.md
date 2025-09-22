@@ -47,7 +47,7 @@ The **SmartAgent** is the intelligent core of the system, using OpenAI's functio
 **Architecture:**
 - **Decision Making**: Uses OpenAI function calling to decide when retrieval is needed
 - **Personality**: Operates as "Archivio", a passionate digital curator
-- **Tool Integration**: Has access to `retrieve_knowledge` function
+- **Tool Integration**: Has access to `retrieve_knowledge` and `query_collection_metadata` functions
 - **Conversation Modes**: Handles both chitchat and scholarly discussions
 
 **Agent Configuration:**
@@ -201,7 +201,19 @@ Citation Map ← Context Assembly ← Vector Search ← pgvector Database
 Response Generation (OpenAI) → SmartAgent → Smart Engine
 ```
 
-### 3. Document Ingestion Flow
+### 3. Metadata Query Flow
+
+```
+User Query → SmartAgent → query_collection_metadata() → SQL Query Generation
+                                                                ↓
+                                                        Database Execution
+                                                                ↓
+Formatted Results ← Raw SQL Results ← Read-Only Transaction ← PostgreSQL
+        ↓
+Response Generation (OpenAI) → SmartAgent → Smart Engine
+```
+
+### 4. Document Ingestion Flow
 
 ```
 CSV File → CSV Parser → Document Records → Database Storage
@@ -220,16 +232,31 @@ Text Files → Text Chunker → Chunk Records → Embedding Service
 - **Embeddings**: text-embedding-3-small (1536 dimensions)
 
 **Function Calling Schema:**
-```json
-{
-  "name": "retrieve_knowledge",
-  "description": "Search the archive for relevant information",
-  "parameters": {
-    "search_terms": "string",
-    "reasoning": "string"
-  }
-}
-```
+The agent has access to two primary tools:
+
+*   **`retrieve_knowledge`**: For semantic search of document content.
+    ```json
+    {
+      "name": "retrieve_knowledge",
+      "description": "Search the archive for relevant information",
+      "parameters": {
+        "query": "string",
+        "reasoning": "string"
+      }
+    }
+    ```
+
+*   **`query_collection_metadata`**: For executing read-only SQL queries against document metadata.
+    ```json
+    {
+      "name": "query_collection_metadata",
+      "description": "Answers questions about collection metadata (counts, lists, etc.)",
+      "parameters": {
+        "sql_query": "string",
+        "reasoning": "string"
+      }
+    }
+    ```
 
 **Agent System Prompt:**
 - **Persona**: "Archivio" - passionate digital curator

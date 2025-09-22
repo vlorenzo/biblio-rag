@@ -79,6 +79,15 @@ works [3][4]. His collection included works by Benedetto Croce,
 classical Greek texts, and modern European literature...
 ```
 
+**Metadata Queries (New)**
+```
+You: How many books did Artom write?
+Archivio: According to the collection metadata, there are 18 works authored by Emanuele Artom.
+
+You: List the authors in the library.
+Archivio: The library contains works by a diverse set of authors, including: Benedetto Croce, Dante Alighieri, Virgil, and many others.
+```
+
 ## Document Ingestion
 
 ### Overview
