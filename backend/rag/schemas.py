@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -30,6 +31,7 @@ class ChatRequest(BaseModel):
 
     history: List[ChatMessage] = Field(default_factory=list)
     prompt: str = Field(..., description="User question")
+    session_id: Optional[UUID] = Field(default=None, description="Unique ID for the conversation session")
 
 
 class ChatResponse(BaseModel):
@@ -37,4 +39,5 @@ class ChatResponse(BaseModel):
 
     answer: str
     citations: List[Dict[str, Any]]  # List of citation objects
-    meta: Dict[str, Any] = Field(default_factory=dict)  # Optional metadata like mode, token usage 
+    meta: Dict[str, Any] = Field(default_factory=dict)  # Optional metadata like mode, token usage
+    session_id: UUID = Field(..., description="Unique ID for the conversation session") 

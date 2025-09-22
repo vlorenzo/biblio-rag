@@ -64,7 +64,12 @@ async def chat_endpoint(
 ) -> ChatResponse:
     """Main conversational endpoint."""
     try:
-        response = await rag_engine.chat(session, request.history, request.prompt)
+        response = await rag_engine.chat(
+            session=session,
+            user_query=request.prompt,
+            history=request.history,
+            session_id=request.session_id,
+        )
         request_counter.labels("/chat", "POST", "200").inc()
         return response
     except Exception as exc:  # pylint: disable=broad-except

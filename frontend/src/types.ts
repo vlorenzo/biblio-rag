@@ -1,51 +1,46 @@
-// Chat message types
-export interface ChatMessage {
-  role: 'user' | 'assistant';
+// Backend API types
+export type Role = 'system' | 'user' | 'assistant';
+
+export interface ChatMessageAPI {
+  role: Role;
   content: string;
-  timestamp?: Date;
 }
 
-// Citation information
+export interface ChatRequest {
+  history: ChatMessageAPI[];
+  prompt: string;
+  session_id?: string | null;
+}
+
 export interface Citation {
   id: string;
   title: string;
   author?: string;
   excerpt: string;
-  source_type?: string;
   publication_year?: number;
   document_class?: string;
   snippet?: string;
   distance?: number;
 }
 
-// Backend API types
-export interface ChatRequest {
-  prompt: string;
-  history: ChatMessage[];
-}
-
 export interface ChatResponse {
   answer: string;
   citations: Citation[];
-  retrieval_trace?: {
-    query_used: string;
-    chunks_retrieved: number;
-    search_results: any[];
+  meta: {
+    mode?: string;
+    citation_map?: Record<string, Citation>;
   };
-  meta?: {
-    mode?: 'chitchat' | 'knowledge';
-    citation_map?: { [key: string]: any };
-    used_citations?: number[];
-    token_usage?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-    };
-  };
+  session_id: string;
 }
 
 // UI state types
-export type ConversationMode = 'chitchat' | 'knowledge' | 'unknown';
+export type ConversationMode = 'chitchat' | 'knowledge' | 'unknown' | 'error';
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
 
 export interface ChatState {
   messages: ChatMessage[];
@@ -54,4 +49,5 @@ export interface ChatState {
   isLoading: boolean;
   error: string | null;
   sidebarOpen: boolean;
+  sessionId: string | null;
 } 

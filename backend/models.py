@@ -7,7 +7,8 @@ from uuid import UUID, uuid4
 from pathlib import Path
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, func, JSON
+from sqlalchemy import Column, DateTime, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel, Session
 import sqlalchemy as sa
 
@@ -28,6 +29,14 @@ class BatchStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class MessageRole(str, Enum):
+    """Enumeration for the role of a message sender."""
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
 
 
 # Base model with common fields
@@ -62,7 +71,7 @@ class Document(BaseModel, table=True):
     source_reference: Optional[str] = Field(default=None)
         
     # Additional bibliographic metadata as JSON
-    extra_metadata: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    extra_metadata: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
 
     # Relationships
     content_files: List["ContentFile"] = Relationship(back_populates="document")
@@ -99,7 +108,7 @@ class Batch(BaseModel, table=True):
             index=True,
         )
     )
-    parameters: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))  # Chunking parameters
+    parameters: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))  # Chunking parameters
     total_documents: int = Field(default=0)
     processed_documents: int = Field(default=0)
     total_chunks: int = Field(default=0)
@@ -133,6 +142,39 @@ class Chunk(BaseModel, table=True):
     # Relationships
     document: Document = Relationship(back_populates="chunks")
     batch: Batch = Relationship(back_populates="chunks")
+
+
+class ChatSession(SQLModel, table=True):
+    """Represents a single conversation session."""
+    __tablename__ = "chat_sessions"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+    messages: List["ChatMessage"] = Relationship(back_populates="session")
+
+
+class ChatMessage(SQLModel, table=True):
+    """Represents a single message within a chat session."""
+    __tablename__ = "chat_messages"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    session_id: UUID = Field(foreign_key="chat_sessions.id", index=True)
+    
+    role: MessageRole = Field(
+        sa_column=Column(
+            sa.Enum(MessageRole, name="messagerole", values_callable=lambda obj: [e.value for e in obj]),
+            nullable=False,
+        )
+    )
+    content: str = Field(nullable=False)
+    
+    # Use metadata_ with a trailing underscore to avoid pydantic conflicts
+    metadata_: Dict[str, Any] = Field(default={}, sa_column=Column(JSONB))
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+    session: "ChatSession" = Relationship(back_populates="messages")
 
 
 # Pydantic models for data preparation (in-memory)

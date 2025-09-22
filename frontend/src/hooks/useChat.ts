@@ -10,6 +10,7 @@ export function useChat() {
     isLoading: false,
     error: null,
     sidebarOpen: false,
+    sessionId: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -48,6 +49,7 @@ export function useChat() {
       const response = await sendChatMessage({
         prompt: prompt.trim(),
         history: backendHistory,
+        session_id: state.sessionId,
       });
 
       // Add assistant message
@@ -66,10 +68,10 @@ export function useChat() {
           const citationId = `cite_${key}`;
           newCitations.set(citationId, {
             id: citationId,
-            title: value.document_title ?? 'Untitled',
+            title: value.title ?? 'Untitled',
             author: value.author ?? undefined,
             excerpt: value.snippet?.slice(0, 200) ?? '',
-            publication_year: value.year ?? undefined,
+            publication_year: value.publication_year ?? undefined,
             document_class: value.document_class ?? undefined,
             snippet: value.snippet,
             distance: value.distance,
@@ -83,7 +85,7 @@ export function useChat() {
       });
 
       // Determine conversation mode
-      const mode: ConversationMode = response.meta?.mode || 'unknown';
+      const mode = (response.meta?.mode || 'unknown') as ConversationMode;
 
       setState(prev => ({
         ...prev,
@@ -92,6 +94,7 @@ export function useChat() {
         mode,
         isLoading: false,
         error: null,
+        sessionId: response.session_id, // Always update session ID from response
       }));
 
     } catch (error) {
@@ -127,6 +130,7 @@ export function useChat() {
       isLoading: false,
       error: null,
       sidebarOpen: false,
+      sessionId: null, // Reset session ID on clear
     });
   }, []);
 

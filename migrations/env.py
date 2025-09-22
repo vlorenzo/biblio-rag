@@ -3,6 +3,7 @@
 import asyncio
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -42,6 +43,16 @@ target_metadata = SQLModel.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+load_dotenv()
+
+# This is the new part: read the DATABASE_URL from the environment
+# and set it in the config object for alembic to use.
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
+else:
+    raise ValueError("DATABASE_URL not set in environment or .env file")
 
 
 def run_migrations_offline() -> None:
