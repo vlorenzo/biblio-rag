@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from typing import Dict, List, Tuple, Optional, Any
+from uuid import UUID
 
 from loguru import logger
 from sqlmodel import Session
@@ -54,11 +55,12 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
         session: Session,
         history: List[Dict[str, str]],
         user_query: str,
-    ) -> Tuple[str, List[int], str, Dict[int, Dict]]:
+        session_id: UUID,
+    ) -> Tuple[str, List[int], str, Dict[str, Any]]:
         """Main chat method that handles the conversation intelligently.
         
         Returns:
-            Tuple of (answer, used_citations, answer_type, citation_map)
+            Tuple of (answer, used_citations, answer_type, agent_metadata)
         """
         try:
             if self._client is None:
@@ -117,27 +119,33 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
             # Make the initial call to the LLM
             response = await self._call_llm(messages, tools)
             
-            # Handle tool calls if any
+            # If the LLM returned tool calls, we must handle them
             if response.choices[0].message.tool_calls:
-                logger.debug("🔄 LLM DECISION: Knowledge needed - proceeding with retrieval")
-                return await self._handle_tool_calls(session, messages, response, tools, user_query)
-            else:
-                # Direct response - classify as chitchat
-                logger.debug("💬 LLM DECISION: Direct conversation - no retrieval needed")
-                content = response.choices[0].message.content or ""
-                if not content.strip():
-                    logger.warning("LLM returned empty content for direct response")
-                    content = "Mi dispiace, non sono riuscito a formulare una risposta adeguata. Potresti riprovare?"
+                logger.debug("💬 LLM DECISION: Knowledge needed - proceeding with retrieval")
+                response.choices[0].message.content = ""  # Clear any conversational text
                 
-                logger.debug("✅ CHITCHAT RESPONSE (RAW):")
-                logger.debug("  Length: {} characters", len(content))
-                logger.debug("  Preview: {}", content[:400] + "..." if len(content) > 400 else content)
-                
-                final_answer = apply_guardrails(content, {}, None, answer_type="chitchat")
-                
-                logger.info("🛡️ CHITCHAT RESPONSE (FINAL): {}", final_answer)
-                
-                return final_answer, [], "chitchat", {}
+                # This is the new part: passing session_id down to the tool handler
+                return await self._handle_tool_calls(
+                    session, response, history, user_query, session_id
+                )
+
+            # If we are here, it's a direct conversational answer
+            logger.debug("💬 LLM DECISION: Direct conversation - no retrieval needed")
+            content = response.choices[0].message.content or ""
+            if not content.strip():
+                logger.warning("LLM returned empty content for direct response")
+                content = "Mi dispiace, non sono riuscito a formulare una risposta adeguata. Potresti riprovare?"
+            
+            logger.debug("✅ CHITCHAT RESPONSE (RAW):")
+            logger.debug("  Length: {} characters", len(content))
+            logger.debug("  Preview: {}", content[:400] + "..." if len(content) > 400 else content)
+            
+            final_answer = apply_guardrails(content, {}, None, answer_type="chitchat")
+            
+            logger.info("🛡️ CHITCHAT RESPONSE (FINAL): {}", final_answer)
+            
+            agent_metadata = {"raw_llm_response": content}
+            return final_answer, [], "chitchat", agent_metadata
                 
         except Exception as e:
             logger.error("Error in SmartAgent.chat: {}", e)
@@ -248,7 +256,11 @@ Remember: You are a real curator with personality, but every factual claim must 
                 # Ensure content is always a string
                 content = msg["content"]
                 if content is None:
-                    content = ""
+                    # Filter out messages with no content, but keep tool calls
+                    if "tool_calls" in msg and msg.get("tool_calls"):
+                         messages.append({"role": msg["role"], "tool_calls": msg["tool_calls"]})
+                    continue
+
                 messages.append({"role": msg["role"], "content": str(content)})
         
         # Add current user query
@@ -336,22 +348,20 @@ Remember: You are a real curator with personality, but every factual claim must 
     async def _handle_tool_calls(
         self,
         session: Session,
-        messages: List[Dict[str, str]],
         response: Any,
-        tools: List[Dict],
+        history: List[Dict[str, str]],
         user_query: str,
-    ) -> Tuple[str, List[int], str, Dict[int, Dict]]:
-        """Handle tool calls from the LLM."""
+        session_id: UUID,
+    ) -> Tuple[str, List[int], str, Dict[str, Any]]:
+        """Handle the tool calls requested by the LLM."""
         
-        logger.info("=== RETRIEVAL WORKFLOW START for user_query: '{}' ===", user_query)
-        logger.debug("Original conversation has {} messages", len(messages))
+        agent_metadata = {}  # Initialize the metadata dictionary
+        citation_map = {}  # Initialize the citation map
         
-        # Add the assistant's message with tool calls
+        # Add the assistant's message with tool calls to the history
         assistant_message = response.choices[0].message.model_dump()
         
-        # Process each tool call
-        tool_results = []
-        citation_map = {}
+        tool_outputs = []
         all_queries = []
         
         for tool_call in response.choices[0].message.tool_calls:
@@ -362,9 +372,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                     reasoning = args.get("reasoning", "")
                     all_queries.append(query)
                     
-                    logger.debug("🔍 TOOL CALL: retrieve_knowledge")
-                    logger.debug("  Query: '{}'", query)
-                    logger.debug("  LLM Reasoning: '{}'", reasoning)
+                    logger.info('session_id="{}" event_type="AGENT_ACTION" tool_name="retrieve_knowledge" query="{}" reasoning="{}"', str(session_id), query, reasoning)
                     
                     # Perform retrieval
                     logger.debug("📖 Searching knowledge base...")
@@ -409,7 +417,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                         # Store full metadata for downstream consumers and logging
                         citation_map[idx] = {
                             "document_id": str(chunk.document_id),
-                            "document_title": doc_title,
+                            "title": doc_title,
                             "sequence_number": chunk.sequence_number,
                             "document_class": doc_class_raw,
                             "author": author,
@@ -438,7 +446,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                     # Optional detailed tool message log (truncated to 2000 chars)
                     logger.trace("[trace] tool_message_for_llm\n{}", result_text)
                     
-                    tool_results.append({
+                    tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "content": result_text
@@ -446,7 +454,8 @@ Remember: You are a real curator with personality, but every factual claim must 
                     
                 except Exception as e:
                     logger.error("Error in retrieve_knowledge: {}", e)
-                    tool_results.append({
+                    session_id_str = str(session_id)
+                    tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "content": "Error retrieving information."
@@ -457,13 +466,11 @@ Remember: You are a real curator with personality, but every factual claim must 
                     sql_query = args.get("sql_query", "").strip()
                     reasoning = args.get("reasoning", "")
                     
-                    logger.debug("🔍 TOOL CALL: query_collection_metadata")
-                    logger.debug("  SQL Query: '{}'", sql_query)
-                    logger.debug("  LLM Reasoning: '{}'", reasoning)
+                    logger.info('session_id="{}" event_type="AGENT_ACTION" tool_name="query_collection_metadata" sql_query="{}" reasoning="{}"', str(session_id), sql_query, reasoning)
 
                     # CRITICAL SAFETY CHECK: Only allow SELECT statements
                     if not sql_query.lower().startswith("select"):
-                        logger.warning("🚫 Blocked non-SELECT query: '{}'", sql_query)
+                        logger.warning("🚫 Blocked non-SELECT query: {}", sql_query)
                         raise ValueError("For security reasons, only SELECT statements are allowed.")
 
                     # Execute the SQL query
@@ -508,7 +515,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                     # Optional detailed tool message log
                     logger.trace("[trace] tool_message_for_llm\n{}", result_text)
                     
-                    tool_results.append({
+                    tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "content": result_text
@@ -516,38 +523,28 @@ Remember: You are a real curator with personality, but every factual claim must 
                     
                 except Exception as e:
                     logger.error("Error in query_collection_metadata: {}", e)
-                    tool_results.append({
+                    tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "content": f"Error querying metadata: {e}"
                     })
         
-        # Add assistant message and tool results to conversation
-        messages.append(assistant_message)
-        messages.extend(tool_results)
+        # --- Second LLM Call: Synthesize final answer from tool results ---
         
-        logger.debug("💬 CONVERSATION ENRICHED with {} tool results.", len(tool_results))
+        # We must provide the original tool_calls message and the new tool_outputs messages
+        messages_for_synthesis = history + [assistant_message] + tool_outputs
         
-        # Make final call to get the answer
-        logger.debug("🤖 Calling LLM with enriched context to generate final answer...")
-        final_response = await self._call_llm(messages, tools)
-        final_content = final_response.choices[0].message.content
-        
-        # Ensure final_content is always a string for guardrails
-        if final_content is None:
-            logger.warning("LLM returned null content for final answer. Using fallback.")
-            final_content = "I apologize, but I wasn't able to generate a proper response."
-        
-        logger.debug("✅ FINAL ANSWER (RAW):")
-        logger.debug("  Length: {} characters", len(final_content))
-        logger.debug("  Preview: {}", final_content[:500] + "..." if len(final_content) > 500 else final_content)
-        
-        # Apply guardrails for knowledge response
-        final_answer = apply_guardrails(final_content, citation_map, messages, answer_type="knowledge")
-        
-        logger.debug("🛡️ FINAL ANSWER (AFTER GUARDRAILS):")
-        logger.debug("  Length: {} characters", len(final_answer))
-        logger.debug("  Preview: {}", final_answer[:500] + "..." if len(final_answer) > 500 else final_answer)
+        logger.debug("📞 Calling LLM again to synthesize tool results...")
+        final_response_obj = await self._client.chat.completions.create(
+            model=settings.openai_chat_model,
+            temperature=self.temperature,
+            messages=messages_for_synthesis,
+        )
+        final_answer = final_response_obj.choices[0].message.content or ""
+        logger.debug("✅ Final synthesized answer: {}", final_answer)
+
+        # Apply guardrails and prepare final metadata
+        agent_metadata["retrieval_queries"] = all_queries
         
         # Extract citation numbers that were actually used
         used_citations = []
@@ -563,9 +560,10 @@ Remember: You are a real curator with personality, but every factual claim must 
             "retrieval_queries": all_queries,
             "answer_type": "knowledge",
             "used_citations": used_citations,
-            "final_answer_preview": final_answer[:200]
+            "final_answer_preview": final_answer[:200],
+            "citation_map": citation_map,
         }
         logger.info("[trace] event=final_response data={}", json.dumps(final_trace_data))
         logger.info("=== RETRIEVAL WORKFLOW END ===")
         
-        return final_answer, sorted(used_citations), "knowledge", citation_map 
+        return final_answer, sorted(used_citations), "knowledge", final_trace_data 

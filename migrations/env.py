@@ -3,6 +3,7 @@
 import asyncio
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -17,16 +18,20 @@ import os
 # access to the values within the .ini file in use.
 config = context.config
 
-# Get the DATABASE_URL from environment variable if it exists
-database_url = os.getenv("DATABASE_URL")
+# Ensure .env variables are loaded before reading DATABASE_URL
+load_dotenv()
 
-# If DATABASE_URL is set, override the sqlalchemy.url from alembic.ini
-# This is crucial for production environments like Fly.io
-if database_url:
-    # The URL needs to be adapted for asyncpg if it's not already
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    config.set_main_option("sqlalchemy.url", database_url)
+# Get the DATABASE_URL from environment variable
+database_url = os.getenv("DATABASE_URL")
+if not database_url:
+    raise ValueError("DATABASE_URL not set in environment or .env file")
+
+# The URL needs to be adapted for asyncpg if it's not already
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Override the sqlalchemy.url from alembic.ini (required on Fly.io)
+config.set_main_option("sqlalchemy.url", database_url)
 
 
 # Interpret the config file for Python logging.
