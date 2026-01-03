@@ -1,5 +1,6 @@
 import { X, BookOpen, Calendar } from 'lucide-react';
 import type { Citation } from '../types';
+import { useI18n } from '../i18n';
 
 interface SourcesSidebarProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface SourcesSidebarProps {
 }
 
 export default function SourcesSidebar({ isOpen, citations, onClose }: SourcesSidebarProps) {
+  const { t } = useI18n();
   const citationsList = Array.from(citations.values());
 
   const getDocumentTypeIcon = (documentClass?: string) => {
@@ -28,15 +30,15 @@ export default function SourcesSidebar({ isOpen, citations, onClose }: SourcesSi
   const getDocumentTypeLabel = (documentClass?: string) => {
     switch (documentClass) {
       case 'authored_by_subject':
-        return 'Written by Artom';
+        return t('sources.type.authored_by_subject');
       case 'subject_library':
-        return 'From Artom\'s Library';
+        return t('sources.type.subject_library');
       case 'about_subject':
-        return 'About Artom';
+        return t('sources.type.about_subject');
       case 'subject_traces':
-        return 'Artom\'s Traces';
+        return t('sources.type.subject_traces');
       default:
-        return 'Document';
+        return t('sources.type.default');
     }
   };
 
@@ -61,7 +63,7 @@ export default function SourcesSidebar({ isOpen, citations, onClose }: SourcesSi
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-archive-gray-200">
             <h2 className="text-lg font-serif font-semibold text-archive-gray-900">
-              Sources & Citations
+              {t('sources.title')}
             </h2>
             <button
               onClick={onClose}
@@ -77,7 +79,7 @@ export default function SourcesSidebar({ isOpen, citations, onClose }: SourcesSi
               <div className="text-center py-8">
                 <BookOpen className="w-12 h-12 text-archive-gray-300 mx-auto mb-4" />
                 <p className="text-archive-gray-500">
-                  Citations will appear here when you ask questions about the archive.
+                  {t('sources.empty')}
                 </p>
               </div>
             ) : (
@@ -104,7 +106,7 @@ export default function SourcesSidebar({ isOpen, citations, onClose }: SourcesSi
                         
                         {citation.author && (
                           <p className="text-sm text-archive-gray-600 mb-2">
-                            by {citation.author}
+                            {t('sources.by')} {citation.author}
                           </p>
                         )}
                         
@@ -138,7 +140,11 @@ export default function SourcesSidebar({ isOpen, citations, onClose }: SourcesSi
           {citationsList.length > 0 && (
             <div className="p-4 border-t border-archive-gray-200 bg-archive-gray-50">
               <p className="text-xs text-archive-gray-500 text-center">
-                {citationsList.length} source{citationsList.length !== 1 ? 's' : ''} found
+                {t('sources.count', {
+                  count: citationsList.length,
+                  label: citationsList.length === 1 ? 'fonte' : 'fonti',
+                  found: citationsList.length === 1 ? 'trovata' : 'trovate',
+                })}
               </p>
             </div>
           )}

@@ -17,6 +17,8 @@ from sqlmodel import Session
 from backend.config import settings
 from backend.services import retrieval_service
 from backend.rag.guardrails import apply_guardrails
+from backend.rag.prompt.loader import load_prompt
+from backend.rag.metadata_labels import map_field_labels
 
 try:
     from openai import AsyncOpenAI
@@ -158,13 +160,23 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
         
         db_schema_description = self._get_db_schema_description()
 
-        system_prompt = f"""You are Archivio, the passionate digital curator of the Emanuele Artom collection. You embody intellectual curiosity, academic precision, and warm engagement.
+        # Load system prompt from template file with variable substitution
+        try:
+            system_prompt = load_prompt("smart_agent_router", db_schema_description=db_schema_description)
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(
+                f"Could not load prompt template 'smart_agent_router': {e}. "
+                "Using fallback hardcoded prompt."
+            )
+            # Fallback to original hardcoded prompt
+            system_prompt = f"""You are Amalia, AI chatbot and the passionate digital curator of the Emanuele Artom collection. You embody intellectual curiosity, academic precision, and warm engagement.
 
 **Basic Information About Emanuele Artom (1915-1944):**
 Emanuele Artom was a brilliant Italian-Jewish intellectual, historian, and resistance fighter during WWII. Born in Turin, he studied at the Scuola Normale Superiore in Pisa. His life was tragically cut short when he was killed by Nazi forces in 1944 while fighting with the Italian Resistance. Despite his brief life, he left behind remarkable writings, a personal library, and scholarly work reflecting the intellectual culture of pre-war Italy.
 
 **Your Personality:**
 - Passionate about preserving and sharing Artom's legacy
+- Your name is Amalia, named in honor of Emanuele Artom's mother, Amalia Segre.
 - Scholarly but warm and engaging
 - Curious about why people are interested in the collection
 - Able to have both casual conversations and deep scholarly discussions
@@ -210,6 +222,30 @@ Field semantics:
 • `class=subject_traces`      → drafts / marginalia (PRIMARY or SECONDARY but fragmentary).
 • `class=subject_library`     → books Artom owned or read (INDIRECT evidence).
 • `class=about_subject`       → later scholars writing about Artom (SECONDARY).
+
+For the user prospective the meaning of the classes (categorie documentarie) are:
+
+1. authored_by_subject -> Scritti di Emanuele Artom
+Questa categoria comprende volumi e articoli scritti direttamente dall\'autore
+Vi rientrano, a titolo esemplificativo i diari personali, saggi, relazioni e testi di riflessione storica o politica
+Si tratta di materiali di produzione diretta del soggetto, fondamentali per lo studio del suo pensiero, della sua attività di storico e partigiano e della sua esperienza personale.
+I documenti sono stati raccolti nelle versioni digitalizzate dalla piattaforma Internet Archive, dove sono reperibili aggregati nel progetto Turin Public Domain
+
+2. about_subject -> Opere su Emanuele Artom
+Questa categoria raccoglie opere che hanno come oggetto la figura di Emanuele Artom
+Questi documenti non fanno parte della produzione personale di Artom, ma contribuiscono alla costruzione storiografica e interpretativa della sua figura.
+I documenti sono stati raccolti nelle versioni digitalizzate dalla piattaforma Internet Archive, dove sono reperibili aggregati nel progetto Turin Public Domain
+
+3. subject_traces -> Documenti del Fondo Emanuele Artom
+Questa categoria include documenti che testimoniano la vita, l\'attività e il contesto storico culturale di Emanuele Artom.
+Vi si trovano i documenti dattiloscritti derivanti dalla selezione di alcune unità documentarie del fondo Emanuele Artom del CDEC (Centro di Documentazione Ebraica Contemporanea). In particolare i materiali selezionati comprendono parte delle seguenti unità documentarie: le Ultime volontà, le Note storiche, il Certificato di morte, la documentazione del processo Dal Dosso–Malanga–Peccolo Besso e una selezione della corrispondenza di Amalia Segre Artom, relativa soprattutto agli anni successivi alla scomparsa del figlio.
+I documenti originali sono conservati presso l\'archivio del CDEC e sono disponibili online al sito della Digital Library dell\'Istituto: https://digital-library.cdec.it/cdec-opac/hist/detail/IT-CDEC-ST0003-000001/Fondo+Emanuele+Artom
+
+4. subject_library -> Biblioteca della famiglia Artom
+Questa categoria raccoglie i volumi che facevano parte della biblioteca privata della famiglia Artom, raccolti in un fondo dedicato ad Emanuele e conservati attualemente presso la Biblioteca storica dell’Università di Torino, Arturo Graf.
+I testi sono descritti e reperibili tramite il catalogo mentre il fondo nella sua interezza è esplorabile grazie alla sua inclusione nella Digital Library di Ateneo: https://dl.unito.it/it/
+
+Endusers should not know the internal names of the classes.
 
 **Your Response Rules:**
 
@@ -263,8 +299,23 @@ Remember: You are a real curator with personality, but every factual claim must 
 
                 messages.append({"role": msg["role"], "content": str(content)})
         
-        # Add current user query
-        messages.append({"role": "user", "content": str(user_query)})
+        # Add current user query.
+        #
+        # NOTE: In the stateful flow, the caller may have already persisted the user
+        # message and then re-loaded history from the DB. In that case, the latest
+        # history item is already this user_query, and appending again would duplicate
+        # the user message in the LLM prompt (bad for both cost and behavior).
+        user_query_str = str(user_query)
+        last_is_same_user_query = False
+        if history:
+            last_msg = history[-1]
+            if isinstance(last_msg, dict) and last_msg.get("role") == "user":
+                last_content = last_msg.get("content")
+                if last_content is not None and str(last_content).strip() == user_query_str.strip():
+                    last_is_same_user_query = True
+
+        if not last_is_same_user_query:
+            messages.append({"role": "user", "content": user_query_str})
         
         return messages
     
@@ -274,7 +325,7 @@ Remember: You are a real curator with personality, but every factual claim must 
         api_request = {
             "model": settings.openai_chat_model,
             "messages": messages,
-            "temperature": self.temperature,
+           # "temperature": self.temperature,
             "tools": tools,
             "tool_choice": "auto"
         }
@@ -285,8 +336,11 @@ Remember: You are a real curator with personality, but every factual claim must 
         # Use DEBUG for a more concise summary
         logger.debug("=== SMART AGENT API CALL ===")
         logger.debug(
-            "Calling model='{}' with temperature={} and {} tools.",
-            api_request["model"], api_request["temperature"], len(api_request["tools"])
+           # "Calling model='{}' with temperature={} and {} tools.",
+            "Calling model='{}' and {} tools.",
+            api_request["model"], 
+           # api_request["temperature"], 
+            len(api_request["tools"])
         )
         
         # For debugging: log the actual messages content (but safely truncated)
@@ -488,7 +542,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                         result_text = "The query returned no results."
                     else:
                         # Get column names from the first row's keys
-                        columns = rows[0]._fields
+                        columns = map_field_labels(rows[0]._fields)
                         
                         # Create a simple text-based table
                         header = " | ".join(map(str, columns))
@@ -532,16 +586,36 @@ Remember: You are a real curator with personality, but every factual claim must 
         # --- Second LLM Call: Synthesize final answer from tool results ---
         
         # We must provide the original tool_calls message and the new tool_outputs messages
-        messages_for_synthesis = history + [assistant_message] + tool_outputs
+        try:
+            synthesis_system_prompt = load_prompt("smart_agent_synthesis")
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(
+                f"Could not load prompt template 'smart_agent_synthesis': {e}. "
+                "Falling back to 'smart_agent_system'."
+            )
+            synthesis_system_prompt = load_prompt(
+                "smart_agent_system", db_schema_description=self._get_db_schema_description()
+            )
+
+        messages_for_synthesis = (
+            [{"role": "system", "content": synthesis_system_prompt}]
+            + history
+            + [assistant_message]
+            + tool_outputs
+        )
         
         logger.debug("📞 Calling LLM again to synthesize tool results...")
         final_response_obj = await self._client.chat.completions.create(
             model=settings.openai_chat_model,
-            temperature=self.temperature,
+            # temperature=self.temperature,
             messages=messages_for_synthesis,
         )
-        final_answer = final_response_obj.choices[0].message.content or ""
-        logger.debug("✅ Final synthesized answer: {}", final_answer)
+        final_answer_raw = final_response_obj.choices[0].message.content or ""
+        logger.debug("✅ Final synthesized answer (RAW): {}", final_answer_raw)
+
+        # Apply guardrails for knowledge answers (citation enforcement + safe fallback)
+        final_answer = apply_guardrails(final_answer_raw, citation_map, None, answer_type="knowledge")
+        logger.info("🛡️ Final synthesized answer (FINAL): {}", final_answer)
 
         # Apply guardrails and prepare final metadata
         agent_metadata["retrieval_queries"] = all_queries
