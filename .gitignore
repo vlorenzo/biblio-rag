@@ -1,21 +1,65 @@
-# Byte-compiled / optimized / DLL files
+## -----------------------------------------------------------------------------
+## OS / Editor
+## -----------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+## -----------------------------------------------------------------------------
+## Python (bytecode, envs, tooling)
+## -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
-# Distribution / packaging
+# Virtual environments / local env files
+.env
+.env.*
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+.pdm.toml
+__pypackages__/
+
+# Tests / coverage / caches
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+cover/
+.cache/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+nosetests.xml
+*.cover
+*.py,cover
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# Build / packaging artifacts
 .Python
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -25,132 +69,50 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-node_modules
 
 # PyInstaller
 *.manifest
 *.spec
 
-# Installer logs
+# Logs
+*.log
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+## -----------------------------------------------------------------------------
+## Node / Frontend (Vite/React)
+## -----------------------------------------------------------------------------
+node_modules/
+frontend/node_modules/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
+## -----------------------------------------------------------------------------
+## Docs / site outputs
+## -----------------------------------------------------------------------------
 docs/_build/
+site/
 
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv    
-Pipfile.lock
-
-# poetry
-poetry.lock
-
-# pdm
-.pdm.toml
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-.idea/
-
-# VS Code
-.vscode/
-
-# macOS
-.DS_Store
-
-# Project specific
+## -----------------------------------------------------------------------------
+## Project-specific runtime/data artifacts (do not commit)
+## -----------------------------------------------------------------------------
 data/
+source_data/
 uploads/
 logs/
-*.db 
-source_data/
+*.db
+*.sqlite*
 local_backup.sql
 db_full_dump_20250921.sql
 production_flydb_dump.sql
+
+## -----------------------------------------------------------------------------
+## IMPORTANT NOTE
+## -----------------------------------------------------------------------------
+# We intentionally do NOT ignore generic "lib/" directories (e.g. frontend/src/lib),
+# because they may contain source code. If you need to ignore a root-level /lib
+# folder in the future, add it explicitly as "/lib/".
