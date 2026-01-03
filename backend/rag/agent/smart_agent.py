@@ -18,6 +18,7 @@ from backend.config import settings
 from backend.services import retrieval_service
 from backend.rag.guardrails import apply_guardrails
 from backend.rag.prompt.loader import load_prompt
+from backend.rag.metadata_labels import map_field_labels
 
 try:
     from openai import AsyncOpenAI
@@ -161,10 +162,10 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
 
         # Load system prompt from template file with variable substitution
         try:
-            system_prompt = load_prompt("smart_agent_system", db_schema_description=db_schema_description)
+            system_prompt = load_prompt("smart_agent_router", db_schema_description=db_schema_description)
         except (FileNotFoundError, ValueError) as e:
             logger.warning(
-                f"Could not load prompt template 'smart_agent_system': {e}. "
+                f"Could not load prompt template 'smart_agent_router': {e}. "
                 "Using fallback hardcoded prompt."
             )
             # Fallback to original hardcoded prompt
@@ -541,7 +542,7 @@ Remember: You are a real curator with personality, but every factual claim must 
                         result_text = "The query returned no results."
                     else:
                         # Get column names from the first row's keys
-                        columns = rows[0]._fields
+                        columns = map_field_labels(rows[0]._fields)
                         
                         # Create a simple text-based table
                         header = " | ".join(map(str, columns))
@@ -585,7 +586,23 @@ Remember: You are a real curator with personality, but every factual claim must 
         # --- Second LLM Call: Synthesize final answer from tool results ---
         
         # We must provide the original tool_calls message and the new tool_outputs messages
-        messages_for_synthesis = history + [assistant_message] + tool_outputs
+        try:
+            synthesis_system_prompt = load_prompt("smart_agent_synthesis")
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(
+                f"Could not load prompt template 'smart_agent_synthesis': {e}. "
+                "Falling back to 'smart_agent_system'."
+            )
+            synthesis_system_prompt = load_prompt(
+                "smart_agent_system", db_schema_description=self._get_db_schema_description()
+            )
+
+        messages_for_synthesis = (
+            [{"role": "system", "content": synthesis_system_prompt}]
+            + history
+            + [assistant_message]
+            + tool_outputs
+        )
         
         logger.debug("📞 Calling LLM again to synthesize tool results...")
         final_response_obj = await self._client.chat.completions.create(
@@ -593,8 +610,12 @@ Remember: You are a real curator with personality, but every factual claim must 
             # temperature=self.temperature,
             messages=messages_for_synthesis,
         )
-        final_answer = final_response_obj.choices[0].message.content or ""
-        logger.debug("✅ Final synthesized answer: {}", final_answer)
+        final_answer_raw = final_response_obj.choices[0].message.content or ""
+        logger.debug("✅ Final synthesized answer (RAW): {}", final_answer_raw)
+
+        # Apply guardrails for knowledge answers (citation enforcement + safe fallback)
+        final_answer = apply_guardrails(final_answer_raw, citation_map, None, answer_type="knowledge")
+        logger.info("🛡️ Final synthesized answer (FINAL): {}", final_answer)
 
         # Apply guardrails and prepare final metadata
         agent_metadata["retrieval_queries"] = all_queries
