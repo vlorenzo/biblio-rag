@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import type { ChatMessage, Citation } from '../types';
+import { useI18n } from '../i18n';
 
 interface MessagesPaneProps {
   messages: ChatMessage[];
@@ -16,6 +17,7 @@ export default function MessagesPane({
   isLoading, 
   onCitationClick 
 }: MessagesPaneProps) {
+  const { t } = useI18n();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -47,11 +49,10 @@ export default function MessagesPane({
               </svg>
             </div>
             <h3 className="text-lg font-serif font-medium text-archive-gray-900 mb-2">
-            Benvenuto nella Collezione di Emanuele Artom
+              {t('welcome.heading')}
             </h3>
             <p className="text-archive-gray-500 max-w-md mx-auto">
-            Interrogami sulla sua vita, i suoi scritti, i documenti e i libri di questa collezione. 
-            Posso aiutarti a esplorarla e a conoscere la sua storia.
+              {t('welcome.body')}
             </p>
           </div>
         )}
@@ -70,7 +71,7 @@ export default function MessagesPane({
             <div className="message-bubble message-assistant">
               <div className="flex items-center space-x-2 text-archive-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Searching the archive...</span>
+                <span>{t('loading.searching')}</span>
               </div>
             </div>
           </div>

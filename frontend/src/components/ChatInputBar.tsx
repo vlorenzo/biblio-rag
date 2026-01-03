@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface ChatInputBarProps {
   onSendMessage: (message: string) => void;
@@ -7,6 +8,7 @@ interface ChatInputBarProps {
 }
 
 export default function ChatInputBar({ onSendMessage, isLoading }: ChatInputBarProps) {
+  const { t } = useI18n();
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -43,7 +45,7 @@ export default function ChatInputBar({ onSendMessage, isLoading }: ChatInputBarP
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about Emanuele Artom's life, works, or documents in the archive..."
+              placeholder={t('input.placeholder')}
               className="w-full px-4 py-3 border border-archive-gray-300 rounded-lg focus:ring-2 focus:ring-archive-blue-500 focus:border-transparent resize-none min-h-[52px] max-h-32"
               disabled={isLoading}
               rows={1}
@@ -64,8 +66,11 @@ export default function ChatInputBar({ onSendMessage, isLoading }: ChatInputBarP
         </div>
         
         <div className="flex justify-between items-center mt-2 text-xs text-archive-gray-500">
-          <span>Press Enter to send, Shift+Enter for new line</span>
+          <span>{t('input.hint')}</span>
           <span>{message.length}/2000</span>
+        </div>
+        <div className="mt-1 text-[11px] text-archive-gray-400 text-center">
+          {t('footer.beta')}
         </div>
       </form>
     </div>
