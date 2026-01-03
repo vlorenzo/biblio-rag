@@ -29,10 +29,10 @@ export default function ChatHeader({ mode, onToggleSidebar, onClearHistory }: Ch
             <BookOpen className="h-8 w-8 text-archive-blue-600" />
             <div>
               <h1 className="text-xl font-serif font-semibold text-archive-gray-900">
-                Emanuele Artom Archive
+                Collezione Emanuele Artom
               </h1>
               <p className="text-sm text-archive-gray-500">
-                Conversational access to the bibliographic collection
+                Accesso conversazionale alle risorse bibliografiche e archivistiche
               </p>
             </div>
           </div>

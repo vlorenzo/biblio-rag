@@ -8,7 +8,7 @@ from backend.rag.guardrails.token_utils import count_tokens
 from backend.rag.guardrails.errors import TokenLimitError, CitationError
 from backend.rag.guardrails.citation import validate_citations
 
-MAX_TOTAL_TOKENS = 25_000  # generous default; model/plan can override
+MAX_TOTAL_TOKENS = 250_000  # generous default; model/plan can override
 
 # Different refusal messages for different failure modes
 REFUSAL_NO_DATA = "I don't have enough information in the collection to answer that question definitively. The Artom archive is still being digitized and catalogued - perhaps that information will become available as we continue our work."
@@ -54,9 +54,9 @@ def apply_guardrails(
             return REFUSAL_CHITCHAT
         
         # Much more generous length limit for conversational responses
-        # Allow up to ~375 words (1500 characters) for warm, engaging responses
+        # Allow up to ~375 words (2500 characters) for warm, engaging responses
         # This allows for substantive biographical or explanatory responses
-        if len(answer_text) > 1500:
+        if len(answer_text) > 2500:
             return REFUSAL_CHITCHAT
 
     if messages is not None:

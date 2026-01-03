@@ -47,11 +47,11 @@ export default function MessagesPane({
               </svg>
             </div>
             <h3 className="text-lg font-serif font-medium text-archive-gray-900 mb-2">
-              Welcome to the Emanuele Artom Archive
+            Benvenuto nella Collezione di Emanuele Artom
             </h3>
             <p className="text-archive-gray-500 max-w-md mx-auto">
-              Ask me about Emanuele Artom's life, works, or the documents in this 
-              bibliographic collection. I can help you explore this historical archive.
+            Interrogami sulla sua vita, i suoi scritti, i documenti e i libri di questa collezione. 
+            Posso aiutarti a esplorarla e a conoscere la sua storia.
             </p>
           </div>
         )}
