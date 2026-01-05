@@ -37,8 +37,7 @@ class Settings(BaseSettings):
         description="OpenAI embedding model",
     )
     openai_chat_model: str = Field(
-        #default="gpt-4o-mini",
-        default="gpt-4.1",
+        default="gpt-5.2-2025-12-11",
         description="OpenAI chat model",
     )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Dict, Any, List, Optional
 
@@ -10,6 +11,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.models import ChatSession, ChatMessage, MessageRole
+
+_LOG_DB_MESSAGES = os.getenv("LOG_DB_MESSAGES", "").lower() in {"1", "true", "yes"}
 
 
 async def get_or_create_session(session: AsyncSession, session_id: Optional[uuid.UUID] = None) -> ChatSession:
@@ -20,7 +23,8 @@ async def get_or_create_session(session: AsyncSession, session_id: Optional[uuid
         row = result.one_or_none()
         if row:
             chat_session = row[0]  # Unpack the ChatSession from the Row
-            logger.debug("Found existing chat session: {}", chat_session.id)
+            if _LOG_DB_MESSAGES:
+                logger.debug("Found existing chat session: {}", chat_session.id)
             return chat_session
 
     # Create a new session if no ID was provided or if the ID was not found
@@ -44,10 +48,11 @@ async def get_session_history(session: AsyncSession, session_id: uuid.UUID) -> L
     
     # Format for the agent's expected input
     history = [
-        {"role": msg.role.value, "content": msg.content}
+        {"role": msg.role.value, "content": msg.content, "metadata": msg.metadata_}
         for msg in messages
     ]
-    logger.debug("Retrieved {} messages for session {}", len(history), session_id)
+    if _LOG_DB_MESSAGES:
+        logger.debug("Retrieved {} messages for session {}", len(history), session_id)
     return history
 
 
@@ -59,8 +64,13 @@ async def add_message_to_session(
     metadata: Optional[Dict[str, Any]] = None,
 ) -> ChatMessage:
     """Add a new message to a chat session and save it to the database."""
-    logger.debug("Adding message to session {}: role={}, content_length={}", 
-                 session_id, role.value, len(content))
+    if _LOG_DB_MESSAGES:
+        logger.debug(
+            "Adding message to session {}: role={}, content_length={}",
+            session_id,
+            role.value,
+            len(content),
+        )
 
     message = ChatMessage(
         session_id=session_id,
@@ -71,5 +81,6 @@ async def add_message_to_session(
     session.add(message)
     await session.commit()
     await session.refresh(message)
-    logger.debug("Successfully saved message {}", message.id)
+    if _LOG_DB_MESSAGES:
+        logger.debug("Successfully saved message {}", message.id)
     return message

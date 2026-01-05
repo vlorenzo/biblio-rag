@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Tuple
+from typing import List, Dict
+import re
+
+from loguru import logger
 
 from backend.rag.guardrails.token_utils import count_tokens
 from backend.rag.guardrails.errors import TokenLimitError, CitationError
@@ -34,33 +37,46 @@ def apply_guardrails(
     3. Check token budget (if `messages` provided).
     4. Fallback to appropriate refusal if violations.
     """
+    def log_guardrail_event(reason: str, details: str | None = None) -> None:
+        preview = answer_text[:300] + "..." if len(answer_text) > 300 else answer_text
+        logger.warning(
+            "[guardrail] reason={} answer_type={} length={} preview={} details={}",
+            reason,
+            answer_type,
+            len(answer_text),
+            preview,
+            details or "",
+        )
+
     if answer_type == "knowledge":
         try:
             validate_citations(answer_text, citation_map)
-        except CitationError:
-            # Distinguish between no data available vs citation failure
-            if not citation_map:  # No retrieval results found
-                return REFUSAL_NO_DATA
-            else:  # Sources available but not properly cited
-                return REFUSAL_GENERIC
+        except CitationError as exc:
+            # Diagnostic only: keep answer, log the citation issue
+            if not citation_map:
+                log_guardrail_event("missing_citations_no_sources", str(exc))
+            else:
+                log_guardrail_event("missing_citations", str(exc))
     else:  # chitchat
         # For chitchat, be much more permissive - we want natural conversation
         
         # Only reject if it has clear citation syntax (like [1], [2])
         # This avoids false positives on normal text with brackets
-        import re
-        citation_pattern = r'\[\d+\]'
+        citation_pattern = r"\[\d+\]"
         if re.search(citation_pattern, answer_text):
-            return REFUSAL_CHITCHAT
+            log_guardrail_event("chitchat_contains_citations")
+            # Soft-fix: strip bracketed citations instead of refusing
+            answer_text = re.sub(citation_pattern, "", answer_text).strip()
         
         # Much more generous length limit for conversational responses
         # Allow up to ~375 words (2500 characters) for warm, engaging responses
         # This allows for substantive biographical or explanatory responses
         if len(answer_text) > 2500:
-            return REFUSAL_CHITCHAT
+            log_guardrail_event("chitchat_length_exceeded")
 
     if messages is not None:
         if count_tokens(messages) > max_tokens:
+            log_guardrail_event("token_limit_exceeded", f"max_tokens={max_tokens}")
             raise TokenLimitError("Prompt exceeds token limit")
 
-    return answer_text 
+    return answer_text

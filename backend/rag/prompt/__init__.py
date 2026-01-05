@@ -1,8 +1,8 @@
-"""Prompt building utilities."""
+"""Prompt registry utilities."""
 
-from .builder import PromptBuilder, PromptTemplate
+from .loader import PromptLoader, load_prompt
 
 __all__ = [
-    "PromptBuilder",
-    "PromptTemplate",
-] 
+    "PromptLoader",
+    "load_prompt",
+]

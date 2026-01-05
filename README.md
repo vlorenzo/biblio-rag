@@ -61,9 +61,9 @@ Open `http://localhost:3000` and start chatting with the archive!
 │   ├── rag/                # Conversation engine and agents
 │   │   ├── agent/         # SmartAgent implementation
 │   │   ├── guardrails/    # Response validation and safety
-│   │   └── prompt/        # Prompt building utilities and templates
+│   │   └── prompt/        # Prompt registry utilities and templates
 │   │       ├── loader.py  # Loads external prompt templates
-│   │       └── templates/ # Editable prompt files (system, router, synthesis, intent)
+│   │       └── templates/ # Editable prompt files (router, synthesis, finalizer, system)
 │   ├── services/          # Business logic (ingestion, retrieval, embeddings)
 │   ├── models.py          # SQLModel database schema
 │   ├── config.py          # Configuration management
@@ -86,7 +86,7 @@ Open `http://localhost:3000` and start chatting with the archive!
 
 **Backend**: FastAPI, SQLModel, PostgreSQL + pgvector, OpenAI APIs, Alembic  
 **Frontend**: React, TypeScript, Tailwind CSS, Vite  
-**AI**: OpenAI GPT-4 (chat), text-embedding-3-small (embeddings)  
+**AI**: OpenAI GPT-5.2 (chat), text-embedding-3-small (embeddings)  
 **Infrastructure**: Docker, uv (package management)
 
 ## Current Status

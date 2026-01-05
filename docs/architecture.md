@@ -33,35 +33,39 @@ The **Smart Engine** serves as the central orchestrator, providing a clean inter
 - Single entry point for chat functionality
 - Minimal orchestration logic (delegates decisions to SmartAgent)
 - Structured response formatting with citations
-- Error handling and logging
+- Latency and turn tracking for monitoring
 
 **Flow:**
 ```python
-User Query → SmartAgent → Decision (retrieve/respond) → Formatted Response
+User Query → SmartAgent (Router) → Decision (retrieve/respond) → Synthesis → Finalizer → Guardrails
 ```
 
 ### 2. SmartAgent (`backend/rag/agent/smart_agent.py`)
 
-The **SmartAgent** is the intelligent core of the system, using OpenAI's function calling to make autonomous decisions about when to retrieve knowledge.
+The **SmartAgent** is the intelligent core of the system, using a multi-phase LLM orchestration to provide accurate and persona-consistent responses.
 
 **Architecture:**
-- **Decision Making**: Uses OpenAI function calling to decide when retrieval is needed
-- **Personality**: Operates as "Archivio", a passionate digital curator
-- **Tool Integration**: Has access to `retrieve_knowledge` and `query_collection_metadata` functions
-- **Conversation Modes**: Handles both chitchat and scholarly discussions
+- **Phase 1: Router**: Uses OpenAI function calling to decide if retrieval is needed or if it's a chitchat interaction.
+- **Phase 2: Action/Retrieval**: Executes tool calls (`retrieve_knowledge` or `query_collection_metadata`).
+- **Phase 3: Synthesis**: Combines retrieved knowledge into a coherent answer.
+- **Phase 4: Finalizer**: Rewrites the answer to enforce user-facing terminology and the "Amalia" persona.
+- **Personality**: Operates as "Amalia", the passionate digital curator of the Fondo Artom.
+- **Tool Integration**: Has access to `retrieve_knowledge` and `query_collection_metadata` functions.
+- **Conversation Modes**: Handles both chitchat and scholarly discussions.
 
 **Agent Configuration:**
-- **Model**: GPT-4o-mini for cost-effective, high-quality responses
-- **Temperature**: 0.3 for consistent yet natural responses
-- **System Prompt**: Detailed persona and behavior instructions
-- **Tool Schema**: Single tool for knowledge retrieval with reasoning parameters
+- **Model**: GPT-5.2 (default) for state-of-the-art reasoning and scholarly conversation.
+- **Temperature**: 0.3 for consistent yet natural responses.
+- **Prompt Registry**: Externalized templates in `backend/rag/prompt/templates/`.
+- **Observability**: Structured logs for every decision and LLM interaction.
 
 **Decision Process:**
-1. Receives user query and conversation history
-2. Analyzes whether knowledge retrieval is needed
-3. If needed, calls `retrieve_knowledge` with search terms
-4. Generates response based on retrieved context
-5. Returns response with citation metadata
+1. Receives user query and conversation history.
+2. **Router Phase**: Analyzes whether knowledge retrieval is needed.
+3. **Action Phase**: If needed, calls retrieval tools.
+4. **Synthesis Phase**: Generates a grounded response based on context.
+5. **Finalizer Phase**: Polishes the tone and enforces metadata terminology.
+6. **Output**: Returns response with citation metadata and related context.
 
 ### 3. Database Layer (`backend/models.py`)
 
@@ -228,7 +232,7 @@ Text Files → Text Chunker → Chunk Records → Embedding Service
 ### OpenAI Service Integration
 
 **Models Used:**
-- **Chat**: gpt-4o-mini (cost-effective, high-quality responses)
+- **Chat**: gpt-5.2 (state-of-the-art reasoning and performance)
 - **Embeddings**: text-embedding-3-small (1536 dimensions)
 
 **Function Calling Schema:**
@@ -259,7 +263,7 @@ The agent has access to two primary tools:
     ```
 
 **Agent System Prompt:**
-- **Persona**: "Archivio" - passionate digital curator
+- **Persona**: "Amalia" - passionate digital curator
 - **Behavior**: Scholarly yet approachable communication style
 - **Citation Rules**: Must reference all consulted sources
 - **Decision Guidelines**: When to retrieve vs. respond directly
@@ -343,7 +347,7 @@ DATABASE_URL=postgresql+...    # Database connection
 **Optional Configuration:**
 ```bash
 # AI Model Settings
-OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_CHAT_MODEL=gpt-5.2-2025-12-11
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 
 # RAG Parameters  

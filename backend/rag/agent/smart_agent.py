@@ -8,7 +8,8 @@ engage in both casual conversation and scholarly discussion.
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Tuple, Optional, Any
+import os
+from typing import Dict, List, Tuple, Optional, Any, Iterable
 from uuid import UUID
 
 from loguru import logger
@@ -32,6 +33,7 @@ class SmartAgent:
     def __init__(self, temperature: float = 0.3):
         self.temperature = temperature
         self._client: Optional[AsyncOpenAI] = None
+        self._log_llm_payload = os.getenv("LOG_LLM_PAYLOAD", "").lower() in {"1", "true", "yes"}
         if AsyncOpenAI is not None:
             self._client = AsyncOpenAI(api_key=settings.openai_api_key)
     
@@ -55,9 +57,10 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
     async def chat(
         self,
         session: Session,
-        history: List[Dict[str, str]],
+        history: List[Dict[str, Any]],
         user_query: str,
         session_id: UUID,
+        turn_id: int | None = None,
     ) -> Tuple[str, List[int], str, Dict[str, Any]]:
         """Main chat method that handles the conversation intelligently.
         
@@ -69,6 +72,8 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
                 logger.error("OpenAI client not available")
                 return "I'm sorry, I'm not able to respond right now.", [], "error", {}
             
+            related_citations = self._extract_related_citations(history)
+
             # Build the conversation with our smart system prompt
             messages = self._build_messages(history, user_query)
             
@@ -119,34 +124,64 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
             ]
             
             # Make the initial call to the LLM
-            response = await self._call_llm(messages, tools)
+            response = await self._call_llm(
+                messages,
+                tools,
+                session_id=session_id,
+                turn_id=turn_id,
+                phase="router",
+            )
             
             # If the LLM returned tool calls, we must handle them
             if response.choices[0].message.tool_calls:
-                logger.debug("💬 LLM DECISION: Knowledge needed - proceeding with retrieval")
+                logger.info(
+                    'component="agent" event_type="AGENT_DECISION" session_id="{}" turn_id={} decision="retrieve"',
+                    str(session_id),
+                    turn_id if turn_id is not None else -1,
+                )
                 response.choices[0].message.content = ""  # Clear any conversational text
                 
                 # This is the new part: passing session_id down to the tool handler
                 return await self._handle_tool_calls(
-                    session, response, history, user_query, session_id
+                    session,
+                    response,
+                    history,
+                    user_query,
+                    session_id,
+                    related_citations,
+                    turn_id,
                 )
 
             # If we are here, it's a direct conversational answer
-            logger.debug("💬 LLM DECISION: Direct conversation - no retrieval needed")
+            logger.info(
+                'component="agent" event_type="AGENT_DECISION" session_id="{}" turn_id={} decision="chitchat"',
+                str(session_id),
+                turn_id if turn_id is not None else -1,
+            )
             content = response.choices[0].message.content or ""
             if not content.strip():
                 logger.warning("LLM returned empty content for direct response")
                 content = "Mi dispiace, non sono riuscito a formulare una risposta adeguata. Potresti riprovare?"
             
-            logger.debug("✅ CHITCHAT RESPONSE (RAW):")
-            logger.debug("  Length: {} characters", len(content))
-            logger.debug("  Preview: {}", content[:400] + "..." if len(content) > 400 else content)
+            logger.debug(
+                "Chitchat response ready: length={}",
+                len(content),
+            )
             
-            final_answer = apply_guardrails(content, {}, None, answer_type="chitchat")
+            finalized_answer = await self._finalize_answer(content, answer_type="chitchat")
+            final_answer = apply_guardrails(finalized_answer, {}, None, answer_type="chitchat")
             
-            logger.info("🛡️ CHITCHAT RESPONSE (FINAL): {}", final_answer)
+            logger.debug(
+                'component="agent" event_type="CHITCHAT_RESPONSE" session_id="{}" turn_id={} length={}',
+                str(session_id),
+                turn_id if turn_id is not None else -1,
+                len(final_answer),
+            )
             
-            agent_metadata = {"raw_llm_response": content}
+            agent_metadata = {
+                "raw_llm_response": content,
+                "related_citations": related_citations,
+            }
             return final_answer, [], "chitchat", agent_metadata
                 
         except Exception as e:
@@ -155,7 +190,7 @@ When using `query_collection_metadata`, you can write PostgreSQL queries against
             logger.exception("Full traceback:")
             return "Mi dispiace, ho incontrato un problema. Potresti riprovare?", [], "error", {}
     
-    def _build_messages(self, history: List[Dict[str, str]], user_query: str) -> List[Dict[str, str]]:
+    def _build_messages(self, history: List[Dict[str, Any]], user_query: str) -> List[Dict[str, str]]:
         """Build the conversation messages with our intelligent system prompt."""
         
         db_schema_description = self._get_db_schema_description()
@@ -318,8 +353,56 @@ Remember: You are a real curator with personality, but every factual claim must 
             messages.append({"role": "user", "content": user_query_str})
         
         return messages
+
+    @staticmethod
+    def _extract_related_citations(history: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Collect unique citations from prior assistant messages for UI context."""
+        related: List[Dict[str, Any]] = []
+        seen_keys: set[tuple[str | None, Any | None]] = set()
+
+        for msg in history:
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("role") != "assistant":
+                continue
+
+            metadata = msg.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+
+            citation_map = metadata.get("citation_map", {})
+            used_citations = metadata.get("used_citations", [])
+            if not isinstance(citation_map, dict):
+                continue
+
+            for idx in used_citations or []:
+                try:
+                    idx_int = int(idx)
+                except (TypeError, ValueError):
+                    continue
+                citation = citation_map.get(idx_int) or citation_map.get(str(idx_int))
+                if not isinstance(citation, dict):
+                    continue
+
+                key = (
+                    str(citation.get("document_id")) if citation.get("document_id") else None,
+                    citation.get("sequence_number"),
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                related.append(citation)
+
+        return related
     
-    async def _call_llm(self, messages: List[Dict[str, str]], tools: List[Dict]) -> Any:
+    async def _call_llm(
+        self,
+        messages: List[Dict[str, str]],
+        tools: List[Dict],
+        session_id: UUID | None = None,
+        turn_id: int | None = None,
+        phase: str = "router",
+    ) -> Any:
         """Make a call to the LLM with optional tools."""
         
         api_request = {
@@ -330,39 +413,17 @@ Remember: You are a real curator with personality, but every factual claim must 
             "tool_choice": "auto"
         }
         
-        # Use TRACE level for the full, verbose payload, which can be enabled in dev
-        logger.trace("Full OpenAI Request: {}", json.dumps(api_request, indent=2))
-        
-        # Use DEBUG for a more concise summary
-        logger.debug("=== SMART AGENT API CALL ===")
-        logger.debug(
-           # "Calling model='{}' with temperature={} and {} tools.",
-            "Calling model='{}' and {} tools.",
-            api_request["model"], 
-           # api_request["temperature"], 
-            len(api_request["tools"])
+        logger.info(
+            'component="llm" event_type="LLM_CALL" session_id="{}" turn_id={} phase="{}" model="{}" tools={} messages={}',
+            str(session_id) if session_id is not None else "",
+            turn_id if turn_id is not None else -1,
+            phase,
+            api_request["model"],
+            len(api_request["tools"]),
+            len(messages),
         )
-        
-        # For debugging: log the actual messages content (but safely truncated)
-        logger.debug("Message details ({} total):", len(messages))
-        for i, msg in enumerate(messages):
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            
-            # Nicer formatting for different message types
-            if role == "system":
-                content_preview = content[:200] + "..." if len(content) > 200 else content
-                logger.debug("  [{}/{}] role={}: {}", i + 1, len(messages), role, content_preview)
-            elif "tool_calls" in msg and msg.get("tool_calls"):
-                logger.debug("  [{}/{}] role={}: [{} tool calls]", i + 1, len(messages), role, len(msg["tool_calls"]))
-            elif role == "tool":
-                content_preview = content[:400] + "..." if len(content) > 400 else content
-                logger.debug("  [{}/{}] role={}: [tool_id={}] {}", i + 1, len(messages), role, msg.get("tool_call_id", "N/A"), content_preview)
-            elif content:
-                content_preview = content[:400] + "..." if len(content) > 400 else content
-                logger.debug("  [{}/{}] role={}: {}", i + 1, len(messages), role, content_preview)
-            else:
-                logger.debug("  [{}/{}] role={}: [no content]", i+1, len(messages), role)
+        if self._log_llm_payload:
+            logger.trace("LLM_CALL payload={}", json.dumps(api_request, indent=2))
         
         try:
             response = await self._client.chat.completions.create(**api_request)
@@ -372,9 +433,8 @@ Remember: You are a real curator with personality, but every factual claim must 
                 logger.error("Empty response from OpenAI API")
                 raise ValueError("Empty response from OpenAI API")
             
-            # Log response details
-            logger.debug("--- SMART AGENT API RESPONSE ---")
-            logger.trace("Full OpenAI Response: {}", response.model_dump_json(indent=2))
+            if self._log_llm_payload:
+                logger.trace("LLM_RESPONSE payload={}", response.model_dump_json(indent=2))
             
             response_message = response.choices[0].message
             response_content = response_message.content or ""
@@ -386,26 +446,29 @@ Remember: You are a real curator with personality, but every factual claim must 
                 "content_length": len(response_content),
             }
             
-            logger.debug("Response received: {}", json.dumps(log_details))
-            if log_details["content_length"] > 0:
-                logger.debug("Response preview: {}", response_content[:200] + "..." if len(response_content) > 200 else response_content)
-            
-            logger.debug("============================")
+            logger.info(
+                'component="llm" event_type="LLM_RESPONSE" session_id="{}" turn_id={} phase="{}" {}',
+                str(session_id) if session_id is not None else "",
+                turn_id if turn_id is not None else -1,
+                phase,
+                json.dumps(log_details),
+            )
             
             return response
             
         except Exception as e:
             logger.error("Error in LLM API call: {}", e)
-            logger.debug("============================")
             raise
     
     async def _handle_tool_calls(
         self,
         session: Session,
         response: Any,
-        history: List[Dict[str, str]],
+        history: List[Dict[str, Any]],
         user_query: str,
         session_id: UUID,
+        related_citations: List[Dict[str, Any]],
+        turn_id: int | None,
     ) -> Tuple[str, List[int], str, Dict[str, Any]]:
         """Handle the tool calls requested by the LLM."""
         
@@ -426,15 +489,28 @@ Remember: You are a real curator with personality, but every factual claim must 
                     reasoning = args.get("reasoning", "")
                     all_queries.append(query)
                     
-                    logger.info('session_id="{}" event_type="AGENT_ACTION" tool_name="retrieve_knowledge" query="{}" reasoning="{}"', str(session_id), query, reasoning)
+                    query_preview = " ".join(query.split())
+                    if len(query_preview) > 200:
+                        query_preview = query_preview[:200] + "..."
+                    logger.info(
+                        'component="tool" event_type="TOOL_CALL" session_id="{}" turn_id={} tool_name="retrieve_knowledge" query_preview="{}"',
+                        str(session_id),
+                        turn_id if turn_id is not None else -1,
+                        query_preview,
+                    )
                     
                     # Perform retrieval
-                    logger.debug("📖 Searching knowledge base...")
+                    logger.debug("Retrieval start")
                     hits = await retrieval_service.retrieve_similar_chunks(
                         session, query, k=5
                     )
                     
-                    logger.debug("📋 RETRIEVAL RESULTS (found {} chunks):", len(hits))
+                    logger.info(
+                        'component="tool" event_type="TOOL_RESULT" session_id="{}" turn_id={} tool_name="retrieve_knowledge" results={}',
+                        str(session_id),
+                        turn_id if turn_id is not None else -1,
+                        len(hits),
+                    )
                     
                     # Build context and citation map
                     context_parts = []
@@ -448,13 +524,17 @@ Remember: You are a real curator with personality, but every factual claim must 
                         author = getattr(chunk.document, "author", None)
                         year = getattr(chunk.document, "publication_year", None)
 
-                        # Log each retrieved chunk with a longer preview
-                        chunk_preview = chunk.text.strip()[:300] + "..." if len(chunk.text.strip()) > 300 else chunk.text.strip()
-                        logger.debug(
-                            "  [{}] class='{}' title='{}' (distance: {:.3f})", 
-                            idx, doc_class_raw, doc_title, distance
-                        )
-                        logger.debug("      Content: {}", chunk_preview)
+                        # Log each retrieved chunk with a longer preview (optional)
+                        if self._log_llm_payload:
+                            chunk_preview = chunk.text.strip()[:300] + "..." if len(chunk.text.strip()) > 300 else chunk.text.strip()
+                            logger.trace(
+                                "Retrieval chunk [{}] class='{}' title='{}' distance={:.3f}",
+                                idx,
+                                doc_class_raw,
+                                doc_title,
+                                distance,
+                            )
+                            logger.trace("Retrieval chunk content: {}", chunk_preview)
 
                         # Build the context part with richer metadata so the model can reason about provenance
                         meta_str_parts = [f"class={doc_class_raw}"]
@@ -492,13 +572,13 @@ Remember: You are a real curator with personality, but every factual claim must 
                             for k, v in citation_map.items()
                         }
                     }
-                    logger.info(
-                        "[trace] event=retrieval data={}",
-                        json.dumps(trace_log_data)
-                    )
-
-                    # Optional detailed tool message log (truncated to 2000 chars)
-                    logger.trace("[trace] tool_message_for_llm\n{}", result_text)
+                    if self._log_llm_payload:
+                        logger.trace(
+                            "event=retrieval data={}",
+                            json.dumps(trace_log_data),
+                        )
+                        # Optional detailed tool message log (truncated to 2000 chars)
+                        logger.trace("tool_message_for_llm\n{}", result_text)
                     
                     tool_outputs.append({
                         "tool_call_id": tool_call.id,
@@ -508,7 +588,6 @@ Remember: You are a real curator with personality, but every factual claim must 
                     
                 except Exception as e:
                     logger.error("Error in retrieve_knowledge: {}", e)
-                    session_id_str = str(session_id)
                     tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
@@ -520,22 +599,35 @@ Remember: You are a real curator with personality, but every factual claim must 
                     sql_query = args.get("sql_query", "").strip()
                     reasoning = args.get("reasoning", "")
                     
-                    logger.info('session_id="{}" event_type="AGENT_ACTION" tool_name="query_collection_metadata" sql_query="{}" reasoning="{}"', str(session_id), sql_query, reasoning)
+                    sql_preview = " ".join(sql_query.split())
+                    if len(sql_preview) > 200:
+                        sql_preview = sql_preview[:200] + "..."
+                    logger.info(
+                        'component="tool" event_type="TOOL_CALL" session_id="{}" turn_id={} tool_name="query_collection_metadata" sql_preview="{}"',
+                        str(session_id),
+                        turn_id if turn_id is not None else -1,
+                        sql_preview,
+                    )
 
                     # CRITICAL SAFETY CHECK: Only allow SELECT statements
                     if not sql_query.lower().startswith("select"):
-                        logger.warning("🚫 Blocked non-SELECT query: {}", sql_query)
+                        logger.warning("Blocked non-SELECT query: {}", sql_query)
                         raise ValueError("For security reasons, only SELECT statements are allowed.")
 
                     # Execute the SQL query
-                    logger.debug("📊 Executing SQL query...")
+                    logger.debug("Executing SQL query...")
                     
                     # We must import `text` from sqlalchemy to execute raw SQL safely
                     from sqlalchemy import text
                     result = await session.execute(text(sql_query))
                     rows = result.all()
 
-                    logger.debug("📊 SQL Query Result ({} rows):", len(rows))
+                    logger.info(
+                        'component="tool" event_type="TOOL_RESULT" session_id="{}" turn_id={} tool_name="query_collection_metadata" rows={}',
+                        str(session_id),
+                        turn_id if turn_id is not None else -1,
+                        len(rows),
+                    )
                     
                     # Format the result into a readable string
                     if not rows:
@@ -561,13 +653,13 @@ Remember: You are a real curator with personality, but every factual claim must 
                         "result_rows": len(rows),
                         "result_preview": result_text[:200] + "..." if len(result_text) > 200 else result_text
                     }
-                    logger.info(
-                        "[trace] event=query_metadata data={}",
-                        json.dumps(trace_log_data)
-                    )
-
-                    # Optional detailed tool message log
-                    logger.trace("[trace] tool_message_for_llm\n{}", result_text)
+                    if self._log_llm_payload:
+                        logger.trace(
+                            "event=query_metadata data={}",
+                            json.dumps(trace_log_data),
+                        )
+                        # Optional detailed tool message log
+                        logger.trace("tool_message_for_llm\n{}", result_text)
                     
                     tool_outputs.append({
                         "tool_call_id": tool_call.id,
@@ -604,18 +696,36 @@ Remember: You are a real curator with personality, but every factual claim must 
             + tool_outputs
         )
         
-        logger.debug("📞 Calling LLM again to synthesize tool results...")
+        logger.info(
+            'component="llm" event_type="LLM_CALL" session_id="{}" turn_id={} phase="synthesis" messages={}',
+            str(session_id),
+            turn_id if turn_id is not None else -1,
+            len(messages_for_synthesis),
+        )
         final_response_obj = await self._client.chat.completions.create(
             model=settings.openai_chat_model,
             # temperature=self.temperature,
             messages=messages_for_synthesis,
         )
         final_answer_raw = final_response_obj.choices[0].message.content or ""
-        logger.debug("✅ Final synthesized answer (RAW): {}", final_answer_raw)
+        logger.info(
+            'component="llm" event_type="LLM_RESPONSE" session_id="{}" turn_id={} phase="synthesis" {}',
+            str(session_id),
+            turn_id if turn_id is not None else -1,
+            json.dumps({
+                "model": final_response_obj.model,
+                "finish_reason": final_response_obj.choices[0].finish_reason,
+                "tool_calls": 0,
+                "content_length": len(final_answer_raw),
+            }),
+        )
+        if self._log_llm_payload:
+            logger.trace("LLM_RESPONSE phase=synthesis content={}", final_answer_raw)
 
         # Apply guardrails for knowledge answers (citation enforcement + safe fallback)
-        final_answer = apply_guardrails(final_answer_raw, citation_map, None, answer_type="knowledge")
-        logger.info("🛡️ Final synthesized answer (FINAL): {}", final_answer)
+        finalized_answer = await self._finalize_answer(final_answer_raw, answer_type="knowledge")
+        final_answer = apply_guardrails(finalized_answer, citation_map, None, answer_type="knowledge")
+        logger.debug("Final synthesized answer ready: length={}", len(final_answer))
 
         # Apply guardrails and prepare final metadata
         agent_metadata["retrieval_queries"] = all_queries
@@ -625,8 +735,18 @@ Remember: You are a real curator with personality, but every factual claim must 
         for i in range(1, len(citation_map) + 1):
             if f"[{i}]" in final_answer:
                 used_citations.append(i)
+
+        unused_citations = [
+            idx for idx in citation_map.keys() if idx not in set(used_citations)
+        ]
         
-        logger.debug("📚 CITATION USAGE: Used {} of {} available citations. (Used: {})", len(used_citations), len(citation_map), used_citations)
+        logger.debug(
+            "Citation usage: used {} of {} available (used: {}, unused: {})",
+            len(used_citations),
+            len(citation_map),
+            used_citations,
+            unused_citations,
+        )
         
         # This is the final, most important trace log for the retrieval workflow
         final_trace_data = {
@@ -634,10 +754,44 @@ Remember: You are a real curator with personality, but every factual claim must 
             "retrieval_queries": all_queries,
             "answer_type": "knowledge",
             "used_citations": used_citations,
+            "unused_citations": unused_citations,
+            "related_citations": related_citations,
             "final_answer_preview": final_answer[:200],
             "citation_map": citation_map,
         }
-        logger.info("[trace] event=final_response data={}", json.dumps(final_trace_data))
-        logger.info("=== RETRIEVAL WORKFLOW END ===")
+        if self._log_llm_payload:
+            logger.trace("event=final_response data={}", json.dumps(final_trace_data))
+            logger.trace("RETRIEVAL_WORKFLOW_END")
         
-        return final_answer, sorted(used_citations), "knowledge", final_trace_data 
+        return final_answer, sorted(used_citations), "knowledge", final_trace_data
+
+    async def _finalize_answer(self, answer_text: str, answer_type: str) -> str:
+        """Rewrite the answer to enforce user-facing terminology."""
+        if self._client is None:
+            return answer_text
+
+        try:
+            finalizer_prompt = load_prompt("smart_agent_finalizer")
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(
+                f"Could not load prompt template 'smart_agent_finalizer': {e}. "
+                "Skipping finalization."
+            )
+            return answer_text
+
+        messages = [
+            {"role": "system", "content": finalizer_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"answer_type: {answer_type}\n\n"
+                    f"answer_text:\n{answer_text}"
+                ),
+            },
+        ]
+
+        response = await self._client.chat.completions.create(
+            model=settings.openai_chat_model,
+            messages=messages,
+        )
+        return response.choices[0].message.content or answer_text

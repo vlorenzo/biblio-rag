@@ -1,6 +1,5 @@
-"""ReAct agent package."""
+"""Smart agent package."""
 
-from .react_agent import ReActAgent
 from .smart_agent import SmartAgent
 
-__all__ = ["ReActAgent", "SmartAgent"] 
+__all__ = ["SmartAgent"]
