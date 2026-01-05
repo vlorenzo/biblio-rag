@@ -4,15 +4,15 @@ A conversational AI system for bibliographic archives that enables natural langu
 
 ## Overview
 
-Biblio RAG transforms traditional archive search into intelligent conversation. Users can ask complex questions about historical collections and receive grounded, cited responses that reference primary sources. The system currently contains the Emanuele Artom bibliographic archive for research and evaluation.
+Biblio RAG transforms traditional archive search into intelligent conversation. Users can ask complex questions about historical collections and receive grounded, cited responses that reference primary sources. The system currently contains the Emanuele Artom bibliographic archive for research and evaluation, guided by “Amalia”, a curator persona that can be tuned through editable prompt templates.
 
 ### Key Capabilities
 
-- **Intelligent Conversation Agent**: Uses OpenAI function calling to decide when to retrieve knowledge vs. respond conversationally
+- **Intelligent Conversation Agent**: Uses OpenAI function calling to decide when to retrieve knowledge vs. respond conversationally; persona and guidance live in editable prompt templates
 - **Citation Transparency**: Every response shows all consulted sources with full bibliographic metadata
 - **Document Classification**: Handles authored works, personal library items, biographical materials, and historical traces
 - **Vector Search Engine**: PostgreSQL with pgvector for semantic similarity search over document embeddings
-- **Modern Web Interface**: React + TypeScript chat application with real-time conversation modes
+- **Modern Web Interface**: React + TypeScript chat application with real-time conversation modes, bilingual UI (Italian/English toggle), and updated branding
 - **Batch Document Ingestion**: CSV metadata parsing with automated text chunking and embedding generation
 
 ## Quick Start
@@ -51,6 +51,7 @@ Open `http://localhost:3000` and start chatting with the archive!
 - **[Getting Started](docs/getting-started.md)** - Detailed installation and deployment options
 - **[User Guide](docs/user-guide.md)** - Using the chat interface and ingesting documents
 - **[Architecture](docs/architecture.md)** - Technical implementation and system design
+- **Prompt Templates**: `backend/rag/prompt/templates/README.md` explains how to adjust the curator persona and system prompts without code changes
 
 ## Project Structure
 
@@ -60,7 +61,9 @@ Open `http://localhost:3000` and start chatting with the archive!
 │   ├── rag/                # Conversation engine and agents
 │   │   ├── agent/         # SmartAgent implementation
 │   │   ├── guardrails/    # Response validation and safety
-│   │   └── prompt/        # Prompt building utilities
+│   │   └── prompt/        # Prompt building utilities and templates
+│   │       ├── loader.py  # Loads external prompt templates
+│   │       └── templates/ # Editable prompt files (system, router, synthesis, intent)
 │   ├── services/          # Business logic (ingestion, retrieval, embeddings)
 │   ├── models.py          # SQLModel database schema
 │   ├── config.py          # Configuration management
@@ -69,6 +72,8 @@ Open `http://localhost:3000` and start chatting with the archive!
 │   └── src/
 │       ├── components/    # React UI components
 │       ├── hooks/         # Custom React hooks (useChat)
+│       ├── lib/           # API client (chat, health)
+│       ├── i18n.tsx       # Lightweight i18n provider (IT/EN toggle)
 │       └── pages/         # Application pages
 ├── migrations/            # Alembic database migrations
 ├── source_data/          # Sample dataset (Emanuele Artom archive)
